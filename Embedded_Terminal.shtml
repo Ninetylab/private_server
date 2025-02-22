@@ -1,0 +1,72 @@
+<!-- Embedded_Terminal.shtml -->
+<script>
+    window.Terminal = {
+        updateStatus(elementId, message, status=''){
+            const el = document.getElementById(elementId);
+            if(!el) return;
+                el.className = 'status-line ' + (status ? `status-${status}`:'');
+                el.textContent = message;
+            console.log(`Status updated: ${elementId} => ${message} [${status}]`);
+        },
+
+        updateGuiStatus(msg, st=''){ this.updateStatus('gui-status', msg, st); },
+        updateLogicStatus(msg, st=''){ this.updateStatus('logic-status', msg, st); },
+        updateSystemStatus(msg, st=''){ this.updateStatus('system-status', msg, st); },
+    
+        updateWsStatus(wsState) {
+            let status, message;
+            switch(wsState) {
+                case 0: // CONNECTING
+                    status = 'warning';
+                    message = 'Pi WebSocket: Connecting...';
+                    break;
+                case 1: // OPEN
+                    status = 'success';
+                    message = 'Pi WebSocket: Connected';
+                    break;
+                case 2: // CLOSING
+                    status = 'warning';
+                    message = 'Pi WebSocket: Closing...';
+                    break;
+                case 3: // CLOSED
+                    status = 'error';
+                    message = 'Pi WebSocket: Disconnected';
+                    break;
+                default:
+                    status = 'error';
+                    message = 'Pi WebSocket: Unknown state';
+            }
+            this.updateSystemStatus(message, status);
+        },
+
+        updateCmdStatus(cmd, success) {
+            const status = success ? 'success' : 'error';
+            const message = success ? 'Command processed' : 'Command failed';
+            this.updateLogicStatus(message, status);
+        },
+    
+        updatePiStatus(lastUpdate){
+            const now = new Date();
+            const diffMin = lastUpdate ? (now-lastUpdate)/60000 : null;
+            const tStr = lastUpdate ? lastUpdate.toLocaleTimeString():'--:--';
+            let stat='success';
+            if(diffMin===null) stat='warning';
+            else if(diffMin>60){ stat='error'; this.updateSystemStatus('Error: Pi not responding','error'); }
+            else if(diffMin>5) stat='warning';
+            this.updateStatus('pi-status', tStr, stat);
+        },
+
+        updateFanSpeed(data) {
+            console.log('Updating fan speed display:', data); // Debug log
+            const speedText = `Fan Speed: ${data.value}%`;
+            this.updateStatus('fan-status', speedText, 'success');
+        },
+
+        handleMessage(msg) {
+            if (msg.type === 'fan_speeds' && window.Terminal) {
+                window.Terminal.updateFanSpeeds(msg.data);
+            }
+            // ... rest of existing message handling
+        }
+    };
+</script>

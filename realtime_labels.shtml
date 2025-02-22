@@ -1,0 +1,121 @@
+<!-- realtime_labels.shtml (ou un <script> dans ton index.html) -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const protocol = (window.location.protocol === 'https:') ? 'wss:' : 'ws:';
+            const host = window.location.hostname;
+            const port = '8000'; 
+            const wsUrl = `${protocol}//${host}:${port}`;
+        
+            console.log('[RealTime] Connecting to', wsUrl);
+            const socket = new WebSocket(wsUrl);
+        
+            socket.onopen = () => {
+                console.log('[RealTime] WebSocket connected');
+            };
+        
+            socket.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+        
+                    switch (msg.type) {
+                        // 1) system_metrics => CPU/RAM => linear gauges
+                        case 'system_metrics': {
+                            const { cpu, ram } = msg.data;
+                            if (window.gauges && window.gauges.linear1 && cpu !== undefined) {
+                                window.gauges.linear1.setValue(cpu);
+                            }
+                            if (window.gauges && window.gauges.linear2 && ram !== undefined) {
+                                window.gauges.linear2.setValue(ram);
+                            }
+                            break;
+                        }
+        
+                        // 2) sensor_update => radial gauges, ECharts, labels
+                        case 'sensor_update': {
+                            const d = msg.data;
+                            console.log('[RealTime] sensor_update:', d);
+        
+                            // (a) Mettre à jour les labels
+                            const tempEl = document.getElementById('Temp_display');
+                            const co2El  = document.getElementById('Co2_display');
+                            const vpdEl  = document.getElementById('VPD_display');
+                            const canEl  = document.getElementById('CanopyTemp_display');
+                            const rhEl   = document.getElementById('RH_display');
+        
+                            if (tempEl) tempEl.textContent = d.Temp + '°';
+                            if (co2El)  co2El.textContent  = d.Co2;
+                            if (vpdEl)  vpdEl.textContent  = d.VPD;
+                            if (canEl)  canEl.textContent  = d.CanopyTemp;
+                            if (rhEl)   rhEl.textContent   = d.RH;
+        
+                            // (b) Gauges radiales
+                            if (window.updateGauges) {
+                                window.updateGauges({
+                                    temperature: parseFloat(d.Temp),
+                                    VPD: parseFloat(d.VPD),
+                                    Co2: parseFloat(d.Co2)
+                                });
+                            }
+        
+                            // (c) ECharts
+                            if (window.updateChartData) {
+                                console.log('[RealTime] Full data received:', d);
+                                window.updateChartData({
+                                    temperature: parseFloat(d.Temp),
+                                    humidity: parseFloat(d.RH),
+                                    co2: parseFloat(d.Co2),
+                                    vpd: parseFloat(d.VPD),
+                                    thermalHeatmap: d.thermalHeatmap
+                                });
+                            }
+                            break;
+                        }
+        
+                        // 3) state => mise à jour des boutons (sans recharger la page)
+                        case 'state': {
+                            console.log('[RealTime] Received full state:', msg.data);
+        
+                            // Appliquer msg.data.buttons[...] sur ton GUI
+                            if (msg.data.buttons && window.ClientLogic) {
+                                // ex: "Btn_Humidifier_0": true, "Btn_Co2_Status_0": false...
+                                for (let btnId in msg.data.buttons) {
+                                    const isActive = msg.data.buttons[btnId];
+                                    // si tu as un toggleOnStateElement(...)
+                                    window.ClientLogic.toggleOnStateElement(btnId, isActive);
+                                    // si tu stockes l'état local
+                                    window.ClientLogic.clientState.buttons[btnId] = isActive;
+                                }
+                            }
+        
+                            // Appliquer msg.data.setpoints[...] si on veut refléter les modifications
+                            if (msg.data.setpoints) {
+                                for (let [k, v] of Object.entries(msg.data.setpoints)) {
+                                    const inp = document.getElementById(k);
+                                    if (inp) {
+                                        inp.value = v;
+                                    }
+                                }
+                            }
+        
+                            break;
+                        }
+        
+                        default:
+                            console.log('[RealTime] Unhandled WS type:', msg.type, msg.data);
+                            break;
+                    }
+        
+                } catch (err) {
+                    console.error('[RealTime] WS parse error:', err);
+                }
+            };
+        
+            socket.onerror = (err) => {
+                console.error('[RealTime] WebSocket error:', err);
+            };
+        
+            socket.onclose = () => {
+                console.warn('[RealTime] WebSocket closed');
+            };
+        });
+        </script>

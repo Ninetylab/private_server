@@ -1,0 +1,330 @@
+<!-- gauge.shtml -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gauges</title>
+
+  <!-- Include Chart.js -->
+  <script src="/node_modules/chart.js/dist/chart.umd.js"></script>
+
+  <style>
+    .gauge-container {
+      display: flex;
+      gap: 0;
+      padding: 0;
+      background: transparent;
+      position: absolute;
+    }
+    canvas {
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <!-- 3 Radial Gauges (Temperature, VPD, CO2) -->
+  <div class="gauge-container temp-gauge" style="left: 60px; top: 85px; width: 400px; height: 400px;">
+    <canvas id="tempGauge"></canvas>
+  </div>
+
+  <div class="gauge-container vpd-gauge" style="left: 431px; top: 85px; width: 400px; height: 400px;">
+    <canvas id="vpdGauge"></canvas>
+  </div>
+
+  <div class="gauge-container co2-gauge" style="left: 805px; top: 85px; width: 400px; height: 400px;">
+    <canvas id="co2Gauge"></canvas>
+  </div>
+
+  <!-- Black rectangles for gauge backgrounds (CPU/RAM) -->
+  <!-- 2 Linear Gauges (CPU/RAM) + 1 vertical gauge -->
+  <div class="gauge-container linear-gauge-1" style="position: fixed; left: 1263px; top: -18px; width: 200px; height: 85px; z-index: 2;">
+    <canvas id="linearGauge1"></canvas>
+  </div>
+  <div class="gauge-container linear-gauge-2" style="position: fixed; left: 1562px; top: -18px; width: 200px; height: 85px; z-index: 2;">
+    <canvas id="linearGauge2"></canvas>
+  </div>
+  <div class="gauge-container vertical-gauge" style="left: 1281px; top: 114px; width: 163px; height: 288px; z-index: 2;">
+    <canvas id="verticalGauge"></canvas>
+  </div>
+
+  <!-- Overlay rectangle for vertical gauge -->
+  <div style="position: absolute; left: 1316px; top: 229px; width: 100px; height: 57px; background: #20252E; border: 1px solid #697A87; border-radius: 2px; z-index: 3;"></div>
+
+  <script>
+  console.log('Gauge system initializing');
+
+  // ------------------------------------------------
+  //  Global object to store gauge instances
+  // ------------------------------------------------
+  window.gauges = {
+      // Radial
+      temp: null,
+      vpd: null,
+      co2: null,
+
+      // Linear
+      linear1: null,  // CPU
+      linear2: null,  // RAM
+
+      // Vertical
+      vertical: null
+  };
+
+  // ------------------------------------------------
+  //  Radial Gauge Class
+  // ------------------------------------------------
+  class Gauge {
+      constructor(canvasId, options = {}) {
+          this.canvas = document.getElementById(canvasId);
+          this.ctx = this.canvas.getContext('2d');
+
+          // Default options
+          this.options = {
+              min: options.min || 0,
+              max: options.max || 40,
+              value: options.value || 0,
+              width: options.width || 260,
+              height: options.height || 300,
+              primaryColor: options.primaryColor || '#6aade4',
+              decimalPlaces: options.decimalPlaces || 0
+          };
+
+          this.initialize();
+      }
+
+      initialize() {
+          this.canvas.width = this.options.width;
+          this.canvas.height = this.options.height;
+
+          // Chart.js doughnut
+          this.chart = new Chart(this.ctx, {
+              type: 'doughnut',
+              data: {
+                  datasets: [{
+                      data: [
+                          this.options.value,
+                          this.options.max - this.options.value
+                      ],
+                      backgroundColor: [ 
+                          this.options.primaryColor, 
+                          '#1A1D21' 
+                      ],
+                      borderWidth: 2,
+                      borderColor: '#000000'
+                  }]
+              },
+              options: {
+                  circumference: 270,
+                  rotation: -135,
+                  cutout: '85%',
+                  responsive: false,
+                  maintainAspectRatio: false,
+                  plugins: {
+                      legend: { display: false },
+                      tooltip: { enabled: false }
+                  },
+                  animation: { duration: 500 }
+              }
+          });
+      }
+
+      setValue(value) {
+          const newValue = Math.min(Math.max(value, this.options.min), this.options.max);
+          this.options.value = newValue;
+          this.chart.data.datasets[0].data = [
+              newValue,
+              this.options.max - newValue
+          ];
+          this.chart.update();
+      }
+  }
+
+  // ------------------------------------------------
+  //  Linear Gauge Class
+  // ------------------------------------------------
+  class LinearGauge {
+      constructor(canvasId, options = {}) {
+          this.canvas = document.getElementById(canvasId);
+          this.ctx = this.canvas.getContext('2d');
+
+          this.options = {
+              min: options.min || 0,
+              max: options.max || 100,
+              value: options.value || 0,
+              primaryColor: options.primaryColor || '#4caf50'
+          };
+
+          this.initialize();
+      }
+
+      initialize() {
+          // Create a bar chart (horizontal) with Chart.js
+          this.chart = new Chart(this.ctx, {
+              type: 'bar',
+              data: {
+                  labels: [''],  // Single bar
+                  datasets: [{
+                      data: [this.options.value],
+                      backgroundColor: [ this.options.primaryColor ],
+                      borderWidth: 0
+                  }]
+              },
+              options: {
+                  indexAxis: 'y',
+                  responsive: false,
+                  maintainAspectRatio: false,
+                  plugins: {
+                      legend: { display: false },
+                      tooltip: { enabled: false }
+                  },
+                  animation: {
+                      duration: 500
+                  },
+                  scales: {
+                      x: {
+                          min: this.options.min,
+                          max: this.options.max,
+                          grid: { display: false },
+                          ticks: { display: false }
+                      },
+                      y: {
+                          display: false
+                      }
+                  }
+              }
+          });
+      }
+
+      setValue(value) {
+          const newValue = Math.min(Math.max(value, this.options.min), this.options.max);
+          this.options.value = newValue;
+          this.chart.data.datasets[0].data[0] = newValue;
+          this.chart.update();
+      }
+  }
+
+  // ------------------------------------------------
+  //  Vertical Gauge Class
+  // ------------------------------------------------
+  class VerticalGauge {
+      constructor(canvasId, options = {}) {
+          this.canvas = document.getElementById(canvasId);
+          this.ctx = this.canvas.getContext('2d');
+
+          this.options = {
+              min: options.min || 0,
+              max: options.max || 100,
+              value: options.value || 0,
+              primaryColor: options.primaryColor || '#446375'
+          };
+          this.initialize();
+      }
+
+      initialize() {
+          this.canvas.width  = 163;
+          this.canvas.height = 288;
+
+          this.chart = new Chart(this.ctx, {
+              type: 'bar',
+              data: {
+                  labels: [''],
+                  datasets: [{
+                      data: [this.options.value],
+                      backgroundColor: [ this.options.primaryColor ],
+                      borderWidth: 0,
+                      barThickness: 163
+                  }]
+              },
+              options: {
+                  indexAxis: 'x',
+                  responsive: false,
+                  maintainAspectRatio: false,
+                  plugins: {
+                      legend: { display: false },
+                      tooltip: { enabled: false }
+                  },
+                  animation: { duration: 500 },
+                  scales: {
+                      y: {
+                          min: this.options.min,
+                          max: this.options.max,
+                          grid: { display: false },
+                          ticks: { display: false }
+                      },
+                      x: { display: false }
+                  }
+              }
+          });
+      }
+
+      setValue(value) {
+          const newValue = Math.min(Math.max(value, this.options.min), this.options.max);
+          this.options.value = newValue;
+          this.chart.data.datasets[0].data[0] = newValue;
+          this.chart.update();
+      }
+  }
+
+  // ------------------------------------------------
+  //  Initialize everything on DOM load
+  // ------------------------------------------------
+  document.addEventListener('DOMContentLoaded', () => {
+      console.log('Initializing gauges');
+
+      // --- Radial gauges for Temp, VPD, CO2 ---
+      window.gauges.temp = new Gauge('tempGauge', {
+          min: 10,
+          max: 40,
+          value: 25,
+          primaryColor: '#E85C33',  // More orange-red for temperature
+          decimalPlaces: 1
+      });
+      window.gauges.vpd = new Gauge('vpdGauge', {
+          min: 0,
+          max: 2,
+          value: 1,
+          primaryColor: '#1C69A0',  // New blue color for VPD
+          decimalPlaces: 2
+      });
+      window.gauges.co2 = new Gauge('co2Gauge', {
+          min: 0,
+          max: 2000,
+          value: 400,
+          primaryColor: '#577F5F',  // Back to green for CO2
+          decimalPlaces: 0
+      });
+
+      // --- Linear gauges (CPU => linear1, RAM => linear2) ---
+      window.gauges.linear1 = new LinearGauge('linearGauge1', {
+          min: 0, max: 100, value: 0, primaryColor: '#E2833E'
+      });
+      window.gauges.linear2 = new LinearGauge('linearGauge2', {
+          min: 0, max: 100, value: 0, primaryColor: '#288E81'
+      });
+
+      // --- Vertical gauge (optionnel) ---
+      window.gauges.vertical = new VerticalGauge('verticalGauge', {
+          min: 0, max: 100, value: 50
+      });
+  });
+
+  // ------------------------------------------------
+  //  updateGauges(...) for sensor_update
+  // ------------------------------------------------
+  window.updateGauges = function(data) {
+      // data ex: { temperature: 24.3, VPD: 1.20, Co2: 720 }
+      // => Radial
+      if (window.gauges.temp && data.temperature !== undefined) {
+          window.gauges.temp.setValue(data.temperature);
+      }
+      if (window.gauges.vpd && data.VPD !== undefined) {
+          window.gauges.vpd.setValue(data.VPD);
+      }
+      if (window.gauges.co2 && data.Co2 !== undefined) {
+          window.gauges.co2.setValue(data.Co2);
+      }
+      console.log('[updateGauges] radial updated =>', data);
+  };
+  </script>
+</body>
+</html>

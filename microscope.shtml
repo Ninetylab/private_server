@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Microscope View (Multiple CSS Filters)</title>
+  <link rel="stylesheet" href="/lib/normalize.css/normalize.css">
+  <style>
+    /* Nord Theme Colors */
+    :root {
+      --nord0: #2E3440;
+      --nord1: #3B4252;
+      --nord2: #434C5E;
+      --nord3: #4C566A;
+      --nord4: #D8DEE9;
+      --nord5: #E5E9F0;
+      --nord6: #ECEFF4;
+      --nord7: #8FBCBB;
+      --nord8: #88C0D0;
+      --nord9: #81A1C1;
+      --nord10: #5E81AC;
+      --nord11: #BF616A;
+      --nord12: #D08770;
+      --nord13: #EBCB8B;
+      --nord14: #A3BE8C;
+      --nord15: #B48EAD;
+    }
+
+    .microscope-window {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 1600px;
+      height: 875px;
+      background-color: #272C31;
+      border: 1px solid rgba(0, 0, 0, 0.34);
+      border-radius: 5px;
+      box-shadow: 0 4px 4px rgba(0, 0, 0, 0.3),
+                  0 8px 12px rgba(0, 0, 0, 0.15);
+      z-index: 1500;
+      display: flex;
+      flex-direction: column;
+      transition: opacity 0.2s ease-in-out;
+    }
+    .microscope-window[style*="display: none"] {
+      opacity: 0;
+    }
+    .microscope-window:not([style*="display: none"]) {
+      opacity: 1;
+    }
+    .microscope-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 20px;
+      background-color: #2F363C;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.52);
+    }
+    .microscope-title {
+      color: #CED9EE;
+      font-family: 'Roboto Condensed', sans-serif;
+      font-size: 18px;
+      font-weight: normal;
+    }
+    .microscope-close {
+      background: none;
+      border: none;
+      color: #CED9EE;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+    .microscope-close:hover {
+      color: #FFFFFF;
+      background: none;
+    }
+    /* Main content: controls on left (vertical column) and video on right */
+    .microscope-content {
+      flex: 1;
+      display: flex;
+      padding: 10px;
+      gap: 10px;
+      align-items: center;
+      position: relative;
+      background-color: #272C31;
+    }
+    /* Controls container: vertical list */
+    .controls-container {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      width: 220px;
+      padding: 10px;
+      background-color: #2F363C;
+      border: 1px solid rgba(0, 0, 0, 0.34);
+      border-radius: 3px;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .control-group label {
+      color: #CED9EE;
+      font-family: 'Roboto Condensed', sans-serif;
+      font-size: 14px;
+      margin-bottom: 5px;
+    }
+    .control-group input[type="range"] {
+      width: 100%;
+      background-color: #1D2125;
+      border: 1px solid rgba(0, 0, 0, 0.34);
+    }
+    .control-group .value-display {
+      color: #BBBFC3;
+      font-family: 'Roboto Condensed', sans-serif;
+      font-size: 12px;
+      text-align: right;
+      margin-top: 3px;
+      display: block;
+    }
+    /* Video container takes the rest of the space */
+    .microscope-video-container {
+      flex: 1;
+      background-color: #1D2125;
+      border: 1px solid rgba(0, 0, 0, 0.34);
+      border-radius: 3px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #microscopeFeed {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000;
+      /* CSS filters (including our custom sharpen filter) will be applied dynamically */
+    }
+  </style>
+</head>
+<body>
+  <!-- SVG Filter Definition for Sharpness -->
+  <svg style="position: absolute; width: 0; height: 0;">
+    <filter id="sharpen-filter">
+      <!-- The feConvolveMatrix simulates a sharpen filter. Its kernelMatrix is updated dynamically. -->
+      <feConvolveMatrix id="sharpen-kernel" order="3" kernelMatrix="0 0 0 0 1 0 0 0 0" divisor="1" bias="0"/>
+    </filter>
+  </svg>
+
+  <!-- Microscope Window -->
+  <div id="microscope-window" class="microscope-window" style="display: none;">
+    <div class="microscope-header">
+      <span class="microscope-title">Microscope View</span>
+      <button class="microscope-close" onclick="MicroscopeUI.close()">&times;</button>
+    </div>
+    <div class="microscope-content">
+      <!-- Controls Container (vertical column) -->
+      <div class="controls-container">
+        <div class="control-group">
+          <label for="microscope-brightness">Brightness</label>
+          <input type="range" id="microscope-brightness" min="1" max="255" value="128">
+          <span class="value-display">128</span>
+        </div>
+        <div class="control-group">
+          <label for="microscope-contrast">Contrast</label>
+          <input type="range" id="microscope-contrast" min="1" max="255" value="128">
+          <span class="value-display">128</span>
+        </div>
+        <div class="control-group">
+          <label for="microscope-sharpness">Sharpness</label>
+          <input type="range" id="microscope-sharpness" min="0" max="200" value="100">
+          <span class="value-display">100</span>
+        </div>
+        <div class="control-group">
+          <label for="microscope-saturation">Saturation</label>
+          <input type="range" id="microscope-saturation" min="1" max="255" value="128">
+          <span class="value-display">128</span>
+        </div>
+        <div class="control-group">
+          <label for="microscope-grayscale">Grayscale</label>
+          <!-- For grayscale, 0 = no effect, 255 = full grayscale -->
+          <input type="range" id="microscope-grayscale" min="0" max="255" value="0">
+          <span class="value-display">0</span>
+        </div>
+        <div class="control-group">
+          <label for="microscope-hue">Hue</label>
+          <!-- For hue-rotate, range in degrees (0-360) -->
+          <input type="range" id="microscope-hue" min="0" max="360" value="0">
+          <span class="value-display">0</span>
+        </div>
+      </div>
+      <!-- Video Container -->
+      <div class="microscope-video-container">
+        <video id="microscopeFeed" autoplay playsinline></video>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.MicroscopeUI = {
+      isOpen: false,
+      videoElement: null,
+      stream: null,
+
+      // Initialize UI: set up video element and slider event listeners.
+      init() {
+        console.log('Initializing MicroscopeUI');
+        this.videoElement = document.getElementById('microscopeFeed');
+        if (!this.videoElement) {
+          console.error('Video element not found');
+          return;
+        }
+
+        // Define an array of slider IDs for convenience.
+        const sliderIds = [
+          'microscope-brightness',
+          'microscope-contrast',
+          'microscope-sharpness',
+          'microscope-saturation',
+          'microscope-grayscale',
+          'microscope-hue'
+        ];
+
+        // Attach event listeners to each slider.
+        sliderIds.forEach(id => {
+          const slider = document.getElementById(id);
+          slider.addEventListener('input', () => {
+            // Update the corresponding value display.
+            const display = slider.nextElementSibling;
+            if (display) {
+              display.textContent = slider.value;
+            }
+            // Update the video filters.
+            MicroscopeUI.updateVideoFilter();
+          });
+        });
+      },
+
+      // Open the microscope window and start the video stream.
+      async open() {
+        console.log('Opening microscope window');
+        const windowEl = document.getElementById('microscope-window');
+        windowEl.style.display = 'flex';
+        this.isOpen = true;
+        try {
+          const constraints = {
+            video: {
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
+              frameRate: { ideal: 30 }
+            }
+          };
+          this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+          this.videoElement.srcObject = this.stream;
+          await this.videoElement.play();
+          console.log('Microscope stream started');
+          this.updateVideoFilter(); // Apply initial filter settings.
+        } catch (error) {
+          console.error('Error starting microscope stream:', error);
+        }
+      },
+
+      // Close the microscope window and stop the video stream.
+      close() {
+        console.log('Closing microscope window');
+        const windowEl = document.getElementById('microscope-window');
+        windowEl.style.display = 'none';
+        this.isOpen = false;
+        if (this.stream) {
+          this.stream.getTracks().forEach(track => track.stop());
+          this.stream = null;
+        }
+        console.log('Microscope stream stopped');
+      },
+
+      // Update the video element's CSS filter based on slider values.
+      updateVideoFilter() {
+        // Retrieve slider values.
+        const brightnessVal = parseInt(document.getElementById('microscope-brightness').value, 10);
+        const contrastVal = parseInt(document.getElementById('microscope-contrast').value, 10);
+        const sharpnessVal = parseInt(document.getElementById('microscope-sharpness').value, 10);
+        const saturationVal = parseInt(document.getElementById('microscope-saturation').value, 10);
+        const grayscaleVal = parseInt(document.getElementById('microscope-grayscale').value, 10);
+        const hueVal = parseInt(document.getElementById('microscope-hue').value, 10);
+
+        // Map brightness, contrast, and saturation: default (128) = 100%.
+        const brightnessPct = (brightnessVal / 128) * 100;
+        const contrastPct = (contrastVal / 128) * 100;
+        const saturationPct = (saturationVal / 128) * 100;
+        // Grayscale: 0 (no effect) to 255 (full effect) mapped to percentage.
+        const grayscalePct = (grayscaleVal / 255) * 100;
+        // Hue rotation: directly use the degree value.
+        const hueDeg = hueVal;
+
+        // Compute sharpness.
+        // For sharpness, use a range of 0 to 200 with 100 as neutral.
+        // If below 100, treat as no sharpening.
+        let t = Math.max(0, (sharpnessVal - 100) / 100);
+        // Interpolate between identity kernel [0,0,0,0,1,0,0,0,0] and sharpen kernel [0,-1,0,-1,5,-1,0,-1,0].
+        const kernelMatrix = `0 ${-t} 0 ${-t} ${1 + 4*t} ${-t} 0 ${-t} 0`;
+
+        // Update the SVG filter's feConvolveMatrix for sharpness.
+        const sharpenKernel = document.getElementById('sharpen-kernel');
+        if (sharpenKernel) {
+          sharpenKernel.setAttribute('kernelMatrix', kernelMatrix);
+        }
+
+        // Build the CSS filter string.
+        // The SVG filter is applied via url(#sharpen-filter) followed by brightness, contrast, saturate, grayscale, and hue-rotate.
+        const filterStr = `url(#sharpen-filter) brightness(${brightnessPct}%) contrast(${contrastPct}%) saturate(${saturationPct}%) grayscale(${grayscalePct}%) hue-rotate(${hueDeg}deg)`;
+        if (this.videoElement) {
+          this.videoElement.style.filter = filterStr;
+        }
+
+        console.log(`Applied CSS filters: ${filterStr} with sharpen kernel: ${kernelMatrix}`);
+      }
+    };
+
+    // Initialize MicroscopeUI when the DOM is fully loaded.
+    document.addEventListener('DOMContentLoaded', () => {
+      MicroscopeUI.init();
+    });
+  </script>
+</body>
+</html>

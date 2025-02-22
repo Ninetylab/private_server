@@ -1,0 +1,1125 @@
+<!-- controls_and_inputs.shtml -->
+<script>
+    console.log('[controls_and_inputs.shtml] loaded');
+    
+    window.ClientLogic = {
+        statesDoc: null,
+        controlsDoc: null,
+        clientState: { buttons:{} },
+        ws: null,
+    
+        // Navigation positions
+        navPositions: {
+            'Btn_Scroll_Left': 0,
+            'Btn_Scroll_Mid': 1920,
+            'Btn_Scroll_Right': 3840,
+            'Btn_Settings': null,
+            'Btn_Microscope': null,
+            'Btn_Fullscreen': null
+        },
+    
+        momentaryButtons: {
+            // Temperature, CO2, VPD
+            'Btn_+_Temp_Set_0':100, 'Btn_-_Temp_Set_0':100,
+            'Btn_+_Co2_Set_0':100, 'Btn_-_Co2_Set_0':100,
+            'Btn_+_Vpd_Set_0':100, 'Btn_-_Vpd_Set_0':100,
+            
+            // Substrate controls
+            'Btn_+_Sub_EC_Set_0':100, 'Btn_-_Sub_EC_Set_0':100,
+            'Btn_+_Sub_Moist_Set_0':100, 'Btn_-_Sub_Moist_Set_0':100,
+            
+            // Substrate Deadband controls
+            'Btn_+_Sub_EC_Set_Pos_DB_0':100, 'Btn_-_Sub_EC_Set_Pos_DB_0':100,
+            'Btn_+_Sub_EC_Set_Neg_DB_0':100, 'Btn_-_Sub_EC_Set_Neg_DB_0':100,
+            'Btn_+_Sub_Moist_Set_Pos_DB_0':100, 'Btn_-_Sub_Moist_Set_Pos_DB_0':100,
+            'Btn_+_Sub_Moist_Set_Neg_DB_0':100, 'Btn_-_Sub_Moist_Set_Neg_DB_0':100,
+            
+            // Step and Pulse controls
+            'Btn_+_Step_Duration_0':100, 'Btn_-_Step_Duration_0':100,
+            'Btn_+_Pulse_Count_0':100, 'Btn_-_Pulse_Count_0':100,
+            'Btn_+_Pulse_Interval_0':100, 'Btn_-_Pulse_Interval_0':100,
+            'Btn_+_Pulse_Duration_0':100, 'Btn_-_Pulse_Duration_0':100,
+            
+            // Light controls
+            'Btn_+_Light_Start_0':100, 'Btn_-_Light_Start_0':100,
+            'Btn_+_Light_Stop_0':100, 'Btn_-_Light_Stop_0':100,
+        },
+    
+        isMomentaryButton(id) {
+            // Only buttons with Btn_+_ or Btn_-_ are momentary
+            return id.includes('Btn_+_') || id.includes('Btn_-_');
+        },
+    
+        isToggleButton(id) {
+            // Any button that isn't momentary is a toggle button
+            return !this.isMomentaryButton(id);
+        },
+    
+        updateStatus(elementId, message, status=''){
+            const el = document.getElementById(elementId);
+            if(!el) return;
+            el.className = 'status-line ' + (status ? `status-${status}`:'');
+            el.textContent = message;
+            console.log(`Status updated: ${elementId} => ${message} [${status}]`);
+        },
+        updateGuiStatus(msg, st=''){ this.updateStatus('gui-status', msg, st); },
+        updateLogicStatus(msg, st=''){ this.updateStatus('logic-status', msg, st); },
+        updateSystemStatus(msg, st=''){ this.updateStatus('system-status', msg, st); },
+    
+        updatePiStatus(lastUpdate){
+            const now = new Date();
+            const diffMin = lastUpdate ? (now-lastUpdate)/60000 : null;
+            const tStr = lastUpdate ? lastUpdate.toLocaleTimeString():'--:--';
+            let stat='success';
+            if(diffMin===null) stat='warning';
+            else if(diffMin>60){ stat='error'; this.updateSystemStatus('Error: Pi not responding','error'); }
+            else if(diffMin>5) stat='warning';
+            this.updateStatus('pi-status', tStr, stat);
+        },
+    
+        toggleOnStateElement(baseId, isActive) {
+            const onId = baseId.replace("_0","_1");
+            console.log('Toggling state:', {baseId, onId, isActive});
+            
+            if (this.statesDoc) {
+                const onElem = this.statesDoc.getElementById(onId);
+                if (onElem) {
+                    onElem.style.opacity = isActive ? '1' : '0.01';
+                }
+            }
+        },
+        toggleStatusElement(statusId, isActive) {
+            if (this.statesDoc) {
+                // Handle both formats: with and without "Connected" in the name
+                const onId = `${statusId}_Connected_1`;
+                const offId = `${statusId}_Connected_0`;
+                
+                const onElem = this.statesDoc.getElementById(onId);
+                const offElem = this.statesDoc.getElementById(offId);
+                
+                if (onElem) onElem.style.opacity = isActive ? '1' : '0.01';
+                if (offElem) offElem.style.opacity = isActive ? '0.01' : '1';
+                
+                // Update terminal status
+                const deviceName = statusId.replace('Status_', '').replace('_Connected', '');
+                window.Terminal.updateLogicStatus(
+                    `${deviceName} connection: ${isActive ? 'connected' : 'disconnected'}`,
+                    isActive ? 'success' : 'error'
+                );
+            }
+        },
+        setButtonValue(id, isActive){
+            this.clientState.buttons[id] = isActive;
+            this.toggleOnStateElement(id,isActive);
+            const displayName = id.replace('_0', '').replace('Btn_', '');
+            window.Terminal.updateLogicStatus(`${displayName} -> ${isActive?'active':'inactive'}`, 'success');
+            console.log(`Button state changed ${id}`, { isActive });
+        },
+        handleMomentaryButton(id){
+            // set active state
+            this.setButtonValue(id, true);
+    
+            const isPlus = id.includes('Btn_+_');
+            
+            // Map button IDs to their corresponding setpoint inputs
+            const buttonToSetpoint = {
+                'Btn_+_Temp_Set_0': 'Temp_setpoint',
+                'Btn_-_Temp_Set_0': 'Temp_setpoint',
+                'Btn_+_Co2_Set_0': 'Co2_setpoint',
+                'Btn_-_Co2_Set_0': 'Co2_setpoint',
+                'Btn_+_Vpd_Set_0': 'VPD_setpoint',
+                'Btn_-_Vpd_Set_0': 'VPD_setpoint',
+                'Btn_+_Sub_EC_Set_0': 'Sub_EC_setpoint',
+                'Btn_-_Sub_EC_Set_0': 'Sub_EC_setpoint',
+                'Btn_+_Sub_Moist_Set_0': 'Sub_Moist_setpoint',
+                'Btn_-_Sub_Moist_Set_0': 'Sub_Moist_setpoint',
+                
+                // Deadband setpoint mappings
+                'Btn_+_Sub_EC_Set_Pos_DB_0': 'Sub_EC_Pos_DB_setpoint',
+                'Btn_-_Sub_EC_Set_Pos_DB_0': 'Sub_EC_Pos_DB_setpoint',
+                'Btn_+_Sub_EC_Set_Neg_DB_0': 'Sub_EC_Neg_DB_setpoint',
+                'Btn_-_Sub_EC_Set_Neg_DB_0': 'Sub_EC_Neg_DB_setpoint',
+                'Btn_+_Sub_Moist_Set_Pos_DB_0': 'Sub_Moist_Pos_DB_setpoint',
+                'Btn_-_Sub_Moist_Set_Pos_DB_0': 'Sub_Moist_Pos_DB_setpoint',
+                'Btn_+_Sub_Moist_Set_Neg_DB_0': 'Sub_Moist_Neg_DB_setpoint',
+                'Btn_-_Sub_Moist_Set_Neg_DB_0': 'Sub_Moist_Neg_DB_setpoint',
+                
+                'Btn_+_Step_Duration_0': 'Step_Duration_setpoint',
+                'Btn_-_Step_Duration_0': 'Step_Duration_setpoint',
+                'Btn_+_Pulse_Count_0': 'Event_Count_setpoint',
+                'Btn_-_Pulse_Count_0': 'Event_Count_setpoint',
+                'Btn_+_Pulse_Interval_0': 'Pulse_Interval_setpoint',
+                'Btn_-_Pulse_Interval_0': 'Pulse_Interval_setpoint',
+                'Btn_+_Pulse_Duration_0': 'Pulse_Duration_setpoint',
+                'Btn_-_Pulse_Duration_0': 'Pulse_Duration_setpoint',
+                'Btn_+_Light_Start_0': 'Light_Start_setpoint',
+                'Btn_-_Light_Start_0': 'Light_Start_setpoint',
+                'Btn_+_Light_Stop_0': 'Light_Shutdown_setpoint',
+                'Btn_-_Light_Stop_0': 'Light_Shutdown_setpoint'
+            };
+
+            const setpointId = buttonToSetpoint[id];
+            if (!setpointId) {
+                console.log('No setpoint mapping for button:', id);
+                return;
+            }
+
+            const input = document.getElementById(setpointId);
+            if(input){
+                console.log(`Adjusting ${setpointId}, current value: ${input.value}`);
+                
+                // Special handling for time inputs
+                if(input.type === 'time'){
+                    let [hours, minutes] = (input.value || '00:00').split(':').map(Number);
+                    let totalMinutes = hours * 60 + minutes;
+                    totalMinutes += isPlus ? 1 : -1;
+                    
+                    if(totalMinutes < 0) totalMinutes += 24 * 60;
+                    if(totalMinutes >= 24 * 60) totalMinutes -= 24 * 60;
+                    
+                    hours = Math.floor(totalMinutes / 60);
+                    minutes = totalMinutes % 60;
+                    input.value = `${hours.toString().padStart(2,'0')}:${minutes.toString().padStart(2,'0')}`;
+                } else {
+                    // Handle numeric inputs
+                    const curVal = parseFloat(input.value) || 0;
+                    const step = parseFloat(input.step) || 0.1;
+                    const newVal = curVal + (isPlus ? step : -step);
+                    
+                    // Special handling for Step Duration to loop between 1 and 6
+                    if (setpointId === 'Step_Duration_setpoint') {
+                        if (isPlus) {
+                            input.value = newVal > 6 ? 1 : newVal;
+                        } else {
+                            input.value = newVal < 1 ? 6 : newVal;
+                        }
+                    } else {
+                        // Apply min/max if set
+                        const min = input.hasAttribute('min') ? parseFloat(input.min) : -Infinity;
+                        const max = input.hasAttribute('max') ? parseFloat(input.max) : Infinity;
+                        const constrainedVal = Math.min(Math.max(newVal, min), max);
+                        
+                        // Use one decimal place for temperature, two for others
+                        const decimals = setpointId === 'Temp_setpoint' ? 1 : (step < 1 ? 2 : 0);
+                        input.value = constrainedVal.toFixed(decimals);
+                    }
+                }
+
+                // Send update to server
+                fetch('/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        type: 'setpoint', 
+                        id: setpointId, 
+                        value: input.value 
+                    })
+                })
+                .then(response => {
+                    const displayName = setpointId.replace('_setpoint', '');
+                    if (response.ok) {
+                        window.Terminal.updateGuiStatus(`State ${displayName} successfully updated -> [${input.value}]`, 'success');
+                        window.Terminal.updateSystemStatus('System running normally', 'success');
+                    } else {
+                        // Try to get detailed error info from response
+                        response.json().then(data => {
+                            if (data.error) {
+                                window.Terminal.updateGuiStatus(`State ${displayName} update failed: ${data.error}`, 'error');
+                                window.Terminal.updateSystemStatus(`System error: ${data.error}`, 'error');
+                            } else if (data.log) {
+                                window.Terminal.updateGuiStatus(`State ${displayName} update failed if: ${data.log}`, 'error');
+                                window.Terminal.updateSystemStatus(`System warning: ${data.log}`, 'warning');
+                            } else {
+                                window.Terminal.updateGuiStatus(`State ${displayName} update failed`, 'error');
+                                window.Terminal.updateSystemStatus('System error: Communication failed', 'error');
+                            }
+                        }).catch(() => {
+                            window.Terminal.updateGuiStatus(`State ${displayName} update failed`, 'error');
+                            window.Terminal.updateSystemStatus('System error: Invalid response', 'error');
+                        });
+                    }
+                })
+                .catch(err => {
+                    const displayName = setpointId.replace('_setpoint', '');
+                    window.Terminal.updateGuiStatus(`State ${displayName} update failed: Network error`, 'error');
+                    window.Terminal.updateSystemStatus('System error: Network connection lost', 'error');
+                });
+            }
+    
+            setTimeout(() => {
+                this.setButtonValue(id, false);
+                fetch('/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'button', id, value: false })
+                });
+            }, 100);
+        },
+        handleButtonClick(id) {
+            // First, handle fan curve save buttons directly:
+            if (id === 'Btn_Save_Curve1_0') {
+                if (window.FanCurves && typeof window.FanCurves.saveCurve === 'function') {
+                    // Set button active state
+                    this.setButtonValue(id, true);
+                    window.FanCurves.saveCurve(1);
+                    
+                    // Reset button state after delay (like other momentary buttons)
+                    setTimeout(() => {
+                        this.setButtonValue(id, false);
+                        // Update server state like other buttons
+                        fetch('/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ type: 'button', id, value: false })
+                        });
+                    }, 100);
+                } else {
+                    console.error('FanCurves.saveCurve not available');
+                }
+                return;
+            }
+            if (id === 'Btn_Save_Curve2_0') {
+                if (window.FanCurves && typeof window.FanCurves.saveCurve === 'function') {
+                    // Set button active state
+                    this.setButtonValue(id, true);
+                    window.FanCurves.saveCurve(2);
+                    
+                    // Reset button state after delay (like other momentary buttons)
+                    setTimeout(() => {
+                        this.setButtonValue(id, false);
+                        // Update server state like other buttons
+                        fetch('/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ type: 'button', id, value: false })
+                        });
+                    }, 100);
+                } else {
+                    console.error('FanCurves.saveCurve not available');
+                }
+                return;
+            }
+    
+            // Handle irrigation save button
+            if (id === 'Btn_Save_Irrig_0') {
+                // Set button active state
+                this.setButtonValue(id, true);
+                
+                // Send update to server to trigger schedule recalculation
+                fetch('/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'button', id, value: true })
+                })
+                .then(response => {
+                    if (response.ok) {
+                        window.Terminal.updateGuiStatus('Irrigation schedule updated successfully', 'success');
+                    } else {
+                        window.Terminal.updateGuiStatus('Failed to update irrigation schedule', 'error');
+                    }
+                })
+                .catch(err => {
+                    console.error('Error updating irrigation schedule:', err);
+                    window.Terminal.updateGuiStatus('Failed to update irrigation schedule: Network error', 'error');
+                });
+
+                // Reset button state after delay
+                setTimeout(() => {
+                    this.setButtonValue(id, false);
+                    fetch('/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: 'button', id, value: false })
+                    });
+                }, 100);
+                return;
+            }
+    
+            // Handle microscope button specially
+            if (id === 'Btn_Microscope_0') {
+                const newVal = !this.clientState.buttons['Btn_Microscope_0'];
+                this.setButtonValue('Btn_Microscope_0', newVal);
+                if (newVal) {
+                    window.MicroscopeUI.open();
+                } else {
+                    window.MicroscopeUI.close();
+                }
+                return;
+            }
+    
+            // Handle settings button specially
+            if (id === 'Btn_Settings_0') {
+                const newVal = !this.clientState.buttons[id];
+                this.setButtonValue(id, newVal);
+                
+                // Toggle settings popup
+                const popup = document.getElementById('settings-popup');
+                if (popup) {
+                    if (newVal) {
+                        // Show popup and load current values
+                        popup.style.display = 'block';
+                        // Load current hysteresis values from state if available
+                        if (this.state && this.state.hysteresis) {
+                            document.getElementById('temp-hyst').value = this.state.hysteresis.temperature || 0.5;
+                            document.getElementById('vpd-hyst').value = this.state.hysteresis.vpd || 0.1;
+                            document.getElementById('co2-hyst').value = this.state.hysteresis.co2 || 50;
+                        }
+                    } else {
+                        popup.style.display = 'none';
+                    }
+                }
+                
+                // Update server state
+                fetch('/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'button', id, value: newVal })
+                }).catch(err => {
+                    console.error('Error updating settings button state:', err);
+                    this.setButtonValue(id, !newVal);
+                });
+                
+                return;
+            }
+    
+            // Handle graph timing and reload buttons
+            if (id === 'Btn_Graph_Timing_0') {
+                // Toggle button state first
+                const curVal = this.clientState.buttons[id] || false;
+                const newVal = !curVal;
+                this.setButtonValue(id, newVal);
+
+                // Cycle through time ranges: 1h -> 6h -> 12h -> 24h -> 48h -> 168h -> back to 1h
+                const timeRanges = [1, 6, 12, 24, 48, 168];
+                const currentRange = this.clientState.currentTimeRange || 24;
+                const currentIndex = timeRanges.indexOf(currentRange);
+                const nextIndex = (currentIndex + 1) % timeRanges.length;
+                const nextRange = timeRanges[nextIndex];
+                
+                this.clientState.currentTimeRange = nextRange;
+                console.log('[Controls] Time range changed to', nextRange, 'hours');
+                
+                if (typeof window.refreshHistoricalData === 'function') {
+                    window.refreshHistoricalData(nextRange);
+                }
+
+                // Save button state
+                fetch('/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'button', id, value: newVal })
+                }).catch(err => {
+                    console.error('[Controls] Failed to update time range button state:', err);
+                    this.setButtonValue(id, curVal);
+                });
+
+                return;
+            }
+
+            if (id === 'Btn_Graph_Reload_0') {
+                // Toggle button state first
+                const curVal = this.clientState.buttons[id] || false;
+                const newVal = !curVal;
+                this.setButtonValue(id, newVal);
+
+                const currentRange = this.clientState.currentTimeRange || 24;
+                console.log('[Controls] Refreshing chart data for', currentRange, 'hours');
+                
+                if (typeof window.refreshHistoricalData === 'function') {
+                    window.refreshHistoricalData(currentRange);
+                }
+
+                // Save button state
+                fetch('/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'button', id, value: newVal })
+                }).catch(err => {
+                    console.error('[Controls] Failed to update reload button state:', err);
+                    this.setButtonValue(id, curVal);
+                });
+
+                // Auto reset the button state after a short delay
+                setTimeout(() => {
+                    this.setButtonValue(id, false);
+                    fetch('/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: 'button', id, value: false })
+                    });
+                }, 100);
+
+                return;
+            }
+    
+            // 1) d'abord, on check si c'est un des 4 boutons ECharts
+            if (id === 'Btn_Graph_Temp_0' ||
+                id === 'Btn_Graph_Co2_0'  ||
+                id === 'Btn_Graph_Humidity_0' ||
+                id === 'Btn_Graph_Vpd_0') 
+            {
+                // On fait un toggle standard
+                const curVal = this.clientState.buttons[id] || false;
+                const newVal = !curVal;
+                this.setButtonValue(id, newVal);
+    
+                // On appelle la fonction qui montre/cache la série ECharts
+                this.toggleChartSeries(id, newVal);
+    
+                // Si tu veux sauver l'état pour ne pas le perdre au refresh
+                fetch('/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'button', id, value: newVal })
+                }).catch(err => {
+                    console.error('Error updating button state:', err);
+                    // revert
+                    this.setButtonValue(id, curVal);
+                });
+    
+                return; // on sort, on ne passe pas par la suite
+            }
+    
+            // Handle Load buttons with dropdown
+            if (id === 'Btn_Load_Curve1_0' || id === 'Btn_Load_Curve2_0' || 
+                id === 'Btn_Load_Timer_0' || id === 'Btn_Load_Irrig_0') {
+                // Remove any existing dropdown first
+                const existingMenu = document.querySelector('.dropdown-menu');
+                if (existingMenu) {
+                    this.setButtonValue(existingMenu.dataset.buttonId, false);
+                    existingMenu.remove();
+                }
+    
+                const btn = this.controlsDoc.getElementById(id);
+                const rect = btn.getBoundingClientRect();
+                
+                const menu = document.createElement('div');
+                menu.className = 'dropdown-menu show';
+                menu.style.top = (rect.bottom + 5) + 'px';
+                menu.style.left = rect.left + 'px';
+                menu.style.width = rect.width + 'px';
+                menu.dataset.buttonId = id;
+                
+                // Set button to active state
+                this.setButtonValue(id, true);
+                
+                ['1', '2', '3', '4'].forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'dropdown-item';
+                    div.textContent = item;
+                    div.onclick = (e) => {
+                        e.stopPropagation();
+                        fetch('/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ type: 'load', id, value: item })
+                        });
+                        this.setButtonValue(id, false);
+                        menu.remove();
+                    };
+                    menu.appendChild(div);
+                });
+                
+                document.body.appendChild(menu);
+    
+                // Use a separate handler for document clicks
+                const closeHandler = (e) => {
+                    if (!menu.contains(e.target) && !btn.contains(e.target)) {
+                        this.setButtonValue(id, false);
+                        menu.remove();
+                        document.removeEventListener('click', closeHandler);
+                    }
+                };
+                
+                setTimeout(() => {
+                    document.addEventListener('click', closeHandler);
+                }, 0);
+                
+                return;
+            }
+    
+            // Handle Fullscreen button
+            if (id === 'Btn_Fullscreen' || id === 'Btn_Fullscreen_0') {
+                const curVal = this.clientState.buttons['Btn_Fullscreen_0'] || false;
+                const newVal = !curVal;
+                
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                    this.setButtonValue('Btn_Fullscreen_0', true);
+                } else {
+                    document.exitFullscreen();
+                    this.setButtonValue('Btn_Fullscreen_0', false);
+                }
+                return;
+            }
+    
+            // Handle Save buttons with popup canvas for other types (Timer, Irrig, etc.)
+            if (id === 'Btn_Save_Timer_0' || id === 'Btn_Save_Irrig_0') {
+                // Remove any existing popup
+                const existingPopup = document.querySelector('.save-popup');
+                if (existingPopup) {
+                    this.setButtonValue(existingPopup.dataset.buttonId, false);
+                    existingPopup.remove();
+                }
+    
+                const btn = this.controlsDoc.getElementById(id);
+                const rect = btn.getBoundingClientRect();
+    
+                const popup = document.createElement('div');
+                popup.className = 'save-popup';
+                popup.dataset.buttonId = id;
+                
+                // Set button to active state
+                this.setButtonValue(id, true);
+    
+                // Create header
+                const header = document.createElement('div');
+                header.className = 'popup-header';
+                popup.appendChild(header);
+    
+                // Add close button
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'popup-close';
+                closeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.setButtonValue(id, false);
+                    popup.remove();
+                };
+                header.appendChild(closeBtn);
+    
+                // Create content area
+                const content = document.createElement('div');
+                content.className = 'popup-content';
+                popup.appendChild(content);
+    
+                // Add buttons container
+                const buttonsContainer = document.createElement('div');
+                buttonsContainer.className = 'popup-buttons';
+                content.appendChild(buttonsContainer);
+    
+                // Create "Overwrite" button
+                const overwriteBtn = document.createElement('button');
+                overwriteBtn.className = 'popup-button overwrite';
+                overwriteBtn.textContent = 'Overwrite';
+                overwriteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    fetch('/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: 'save', id, action: 'overwrite' })
+                    });
+                    this.setButtonValue(id, false);
+                    popup.remove();
+                };
+                buttonsContainer.appendChild(overwriteBtn);
+    
+                // Create "Create New" button
+                const createNewBtn = document.createElement('button');
+                createNewBtn.className = 'popup-button';
+                createNewBtn.textContent = 'Create New';
+                createNewBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    fetch('/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: 'save', id, action: 'create_new' })
+                    });
+                    this.setButtonValue(id, false);
+                    popup.remove();
+                };
+                buttonsContainer.appendChild(createNewBtn);
+    
+                document.body.appendChild(popup);
+    
+                // Center the popup in the viewport
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+                const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                
+                popup.style.left = `${scrollLeft + (viewportWidth - popup.offsetWidth) / 2}px`;
+                popup.style.top = `${scrollTop + (viewportHeight - popup.offsetHeight) / 2}px`;
+    
+                return;
+            }
+    
+            // Handle light state button specially
+            if (id === 'Btn_Light_State_0') {
+                // Remove any existing popup first
+                const existingPopup = document.querySelector('.save-popup');
+                if (existingPopup) {
+                    this.setButtonValue(existingPopup.dataset.buttonId, false);
+                    existingPopup.remove();
+                }
+
+                const curVal = this.clientState.buttons[id] || false;
+                const newVal = !curVal;
+                const actionText = newVal ? 'ON' : 'OFF';
+
+                // Create popup using existing styling
+                const popup = document.createElement('div');
+                popup.className = 'save-popup';
+                popup.dataset.buttonId = id;
+                
+                // Set button to active state
+                this.setButtonValue(id, true);
+
+                // Create header with close button
+                const header = document.createElement('div');
+                header.className = 'popup-header';
+                popup.appendChild(header);
+
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'popup-close';
+                closeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.setButtonValue(id, curVal);
+                    popup.remove();
+                };
+                header.appendChild(closeBtn);
+
+                // Create content area
+                const content = document.createElement('div');
+                content.className = 'popup-content';
+                content.innerHTML = `
+                    <div style="color: #BBBFC3; font-family: 'Roboto Condensed', sans-serif; font-size: 24px; text-align: center; margin-top: 40px;">
+                        Are you sure you want to turn the lights ${actionText}?
+                    </div>
+                `;
+                popup.appendChild(content);
+
+                // Add buttons container
+                const buttonsContainer = document.createElement('div');
+                buttonsContainer.className = 'popup-buttons';
+                content.appendChild(buttonsContainer);
+
+                // Create "Cancel" button
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'popup-button overwrite';
+                cancelBtn.textContent = 'Cancel';
+                cancelBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.setButtonValue(id, curVal);
+                    popup.remove();
+                };
+                buttonsContainer.appendChild(cancelBtn);
+
+                // Create "Confirm" button
+                const confirmBtn = document.createElement('button');
+                confirmBtn.className = 'popup-button';
+                confirmBtn.style.backgroundColor = '#577F5F';  // Correct green color
+                confirmBtn.style.color = '#FFFFFF';  // White text for better contrast
+                confirmBtn.textContent = 'Confirm';
+                confirmBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.setButtonValue(id, newVal);
+                    fetch('/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: 'button', id, value: newVal })
+                    }).catch(err => {
+                        console.error('Error updating light state:', err);
+                        this.setButtonValue(id, curVal);
+                    });
+                    popup.remove();
+                };
+                buttonsContainer.appendChild(confirmBtn);
+
+                document.body.appendChild(popup);
+
+                // Center the popup in the viewport
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+                const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                
+                popup.style.left = `${scrollLeft + (viewportWidth - popup.offsetWidth) / 2}px`;
+                popup.style.top = `${scrollTop + (viewportHeight - popup.offsetHeight) / 2}px`;
+
+                return;
+            }
+    
+            // Handle other button types
+            if (this.isMomentaryButton(id)) {
+                this.handleMomentaryButton(id);
+                return;
+            }
+            
+            // Handle toggle buttons
+            const curVal = this.clientState.buttons[id] || false;
+            const newVal = !curVal;
+            this.setButtonValue(id, newVal);
+            
+            fetch('/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'button', id, value: newVal })
+            }).catch(err => {
+                console.error('Error updating button state:', err);
+                this.setButtonValue(id, curVal);
+            });
+        },
+        setActiveNavButton(btnId) {
+            const navStatesObj = document.getElementById('nav-states');
+            if (!navStatesObj || !navStatesObj.contentDocument) return;
+    
+            // Reset all navigation button states
+            Object.keys(this.navPositions).forEach(id => {
+                const elem = navStatesObj.contentDocument.getElementById(id + '_1');
+                if (elem) {
+                    elem.style.opacity = '0';
+                }
+            });
+    
+            // Set active button state
+            const activeElem = navStatesObj.contentDocument.getElementById(btnId + '_1');
+            if (activeElem) {
+                activeElem.style.opacity = '1';
+            }
+        },
+        initWebSocket() {
+            console.log('Initializing WebSocket connection');
+            this.ws = new WebSocket(`ws://${window.location.hostname}:8000`);
+            
+            this.ws.onopen = () => {
+                console.log('WebSocket connection established');
+                this.toggleStatusElement('Status_Serv', true);
+                window.Terminal.updateLogicStatus('Server connection established', 'success');
+                window.Terminal.updateSystemStatus('System connected', 'success');
+            };
+            
+            this.ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    this.handleMessage(msg);
+                } catch (err) {
+                    console.error('Error parsing WebSocket message:', err);
+                    window.Terminal.updateSystemStatus('Error processing message', 'error');
+                }
+            };
+            
+            this.ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                this.toggleStatusElement('Status_Serv', false);
+                window.Terminal.updateLogicStatus('Server connection error', 'error');
+                window.Terminal.updateSystemStatus('Connection error', 'error');
+            };
+            
+            this.ws.onclose = () => {
+                console.log('WebSocket connection closed');
+                this.toggleStatusElement('Status_Serv', false);
+                window.Terminal.updateLogicStatus('Server connection closed', 'error');
+                window.Terminal.updateSystemStatus('Connection lost', 'error');
+                // Try to reconnect after 5 seconds
+                setTimeout(() => this.initWebSocket(), 5000);
+            };
+        },
+        initControlsAndInputs() {
+            console.log('initControlsAndInputs');
+            // Initialize WebSocket first
+            this.initWebSocket();
+    
+            // Add fullscreen change event listener
+            document.addEventListener('fullscreenchange', () => {
+                const isFullscreen = !!document.fullscreenElement;
+                this.setActiveNavButton(isFullscreen ? 'Btn_Fullscreen' : 'Btn_Fullscreen_0');
+            });
+    
+            const controlsObj = document.getElementById('controls');
+            const statesObj = document.getElementById('states');
+    
+            // Initialize main controls
+            if (controlsObj) {
+                controlsObj.addEventListener('load', () => {
+                    console.log('Controls SVG loaded');
+                    this.controlsDoc = controlsObj.contentDocument;
+                    const allBtns = this.controlsDoc.querySelectorAll('[id$="_0"]');
+                    allBtns.forEach(btn => {
+                        btn.addEventListener('click', () => this.handleButtonClick(btn.id));
+                    });
+                });
+            }
+    
+            if (statesObj) {
+                statesObj.addEventListener('load', () => {
+                    console.log('States SVG loaded');
+                    this.statesDoc = statesObj.contentDocument;
+                    // fetch the current state from Node
+                    fetch('/state')
+                        .then(r => r.json())
+                        .then(cur => {
+                            console.log('Applying current state:', cur);
+                            this.clientState.buttons = cur.buttons || {};
+                            for (let b in this.clientState.buttons) {
+                                this.toggleOnStateElement(b, this.clientState.buttons[b]);
+                            }
+                            if (cur.setpoints) {
+                                Object.entries(cur.setpoints).forEach(([typ, val]) => {
+                                    const inp = document.getElementById(typ);
+                                    if (inp) {
+                                        inp.value = val;
+                                        console.log(`Setting ${typ} to ${val}`);
+                                    }
+                                });
+                            }
+                        });
+                });
+            }
+    
+            // Add click handlers for nav-bar buttons in main HTML
+            document.querySelectorAll('#nav-bar .nav-btn').forEach(htmlBtn => {
+                htmlBtn.addEventListener('click', () => {
+                    const btnId = htmlBtn.dataset.btnId;
+                    this.handleButtonClick(btnId);
+                });
+            });
+    
+            // Initialize setpoint input behaviors
+            const setpointInputs = document.querySelectorAll('.setpoint-input');
+            setpointInputs.forEach(input => {
+                const saveSetpoint = (input) => {
+                    fetch('/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            type: 'setpoint', 
+                            id: input.id, 
+                            value: input.value 
+                        })
+                    })
+                    .then(response => {
+                        const displayName = input.id.replace('_setpoint', '');
+                        if (response.ok) {
+                            this.updateGuiStatus(`State ${displayName} successfully updated -> [${input.value}]`, 'success');
+                            this.updateSystemStatus('System running normally', 'success');
+                        } else {
+                            // Try to get detailed error info from response
+                            response.json().then(data => {
+                                if (data.error) {
+                                    this.updateGuiStatus(`State ${displayName} update failed: ${data.error}`, 'error');
+                                    this.updateSystemStatus(`System error: ${data.error}`, 'error');
+                                } else if (data.log) {
+                                    this.updateGuiStatus(`State ${displayName} update failed if: ${data.log}`, 'error');
+                                    this.updateSystemStatus(`System warning: ${data.log}`, 'warning');
+                                } else {
+                                    this.updateGuiStatus(`State ${displayName} update failed`, 'error');
+                                    this.updateSystemStatus('System error: Communication failed', 'error');
+                                }
+                            }).catch(() => {
+                                this.updateGuiStatus(`State ${displayName} update failed`, 'error');
+                                this.updateSystemStatus('System error: Invalid response', 'error');
+                            });
+                        }
+                    })
+                    .catch(err => {
+                        const displayName = input.id.replace('_setpoint', '');
+                        this.updateGuiStatus(`State ${displayName} update failed: Network error`, 'error');
+                        this.updateSystemStatus('System error: Network connection lost', 'error');
+                    });
+                };
+    
+                input.addEventListener('focus', function() {
+                    this.select();
+                });
+    
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        saveSetpoint(this);
+                        this.blur();
+                    }
+                });
+    
+                input.addEventListener('blur', function() {
+                    saveSetpoint(this);
+                });
+            });
+    
+            // Initialize navigation buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const btnId = btn.dataset.btnId;
+                    // Handle scroll positions if they exist
+                    const position = this.navPositions[btnId];
+                    if (position !== undefined && position !== null) {
+                        window.scrollTo(position, 0);
+                    }
+                    // Always toggle the button state
+                    this.setActiveNavButton(btnId);
+                });
+            });
+    
+            // Initialize date/time display
+            this.initDateTime();
+    
+            // Initialize microscope popup
+            document.getElementById('Btn_Microscope_0')?.addEventListener('click', () => {
+                const newVal = !this.clientState.buttons['Btn_Microscope_0'];
+                this.setButtonValue('Btn_Microscope_0', newVal);
+                if (newVal) {
+                    window.MicroscopeUI.open();
+                } else {
+                    window.MicroscopeUI.close();
+                }
+            });
+        },
+    
+        initDateTime(){
+            // Update date/hour every minute
+            function updateDateTime(){
+                const now = new Date();
+                const year = now.getFullYear();
+                const month=String(now.getMonth()+1).padStart(2,'0');
+                const day  =String(now.getDate()).padStart(2,'0');
+                const hrs  =String(now.getHours()).padStart(2,'0');
+                const min  =String(now.getMinutes()).padStart(2,'0');
+    
+                const dateStr=`${day}/${month}/${year}`;
+                const timeStr=`${hrs}:${min}`;
+    
+                const dateEl=document.getElementById('system_date_display');
+                const timeEl=document.getElementById('system_hour_display');
+                if(dateEl) dateEl.textContent=dateStr;
+                if(timeEl) timeEl.textContent=timeStr;
+            }
+            updateDateTime();
+            setInterval(updateDateTime,60000);
+        },
+        toggleChartSeries(id, isActive) {
+            // 1) Mapping entre ID de bouton et nom de série ECharts
+            const mapBtnToSeries = {
+                'Btn_Graph_Temp_0': 'Temperature',
+                'Btn_Graph_Co2_0': 'CO2',
+                'Btn_Graph_Humidity_0': 'Humidity',
+                'Btn_Graph_Vpd_0': 'VPD'
+            };
+            const seriesName = mapBtnToSeries[id];
+            if (!seriesName) {
+                console.warn('[toggleChartSeries] Unknown button =>', id);
+                return;
+            }
+    
+            // 2) Vérifier que le chart existe
+            if (!window.stackedChart) {
+                console.warn('[toggleChartSeries] stackedChart is null, cannot toggle');
+                return;
+            }
+    
+            console.log('[toggleChartSeries]', { id, seriesName, isActive });
+    
+            // 3) Selon isActive, on "legendSelect" (affiche) ou "legendUnSelect" (masque)
+            if (isActive) {
+                window.stackedChart.dispatchAction({
+                    type: 'legendSelect',
+                    name: seriesName
+                });
+            } else {
+                window.stackedChart.dispatchAction({
+                    type: 'legendUnSelect',
+                    name: seriesName
+                });
+            }
+        },
+        handleMessage(msg) {
+            try {
+                // Handle connection status updates
+                if (msg.type === 'connection_status') {
+                    // Update status indicators
+                    if (msg.data.hasOwnProperty('pi')) {
+                        this.toggleStatusElement('Status_Pi', msg.data.pi);
+                    }
+                    if (msg.data.hasOwnProperty('esp1')) {
+                        this.toggleStatusElement('Status_Esp1', msg.data.esp1);
+                    }
+                    if (msg.data.hasOwnProperty('esp2')) {
+                        this.toggleStatusElement('Status_Esp2', msg.data.esp2);
+                    }
+                    if (msg.data.hasOwnProperty('esp3')) {
+                        this.toggleStatusElement('Status_Esp3', msg.data.esp3);
+                    }
+                    if (msg.data.hasOwnProperty('server')) {
+                        this.toggleStatusElement('Status_Serv', msg.data.server);
+                    }
+
+                    // Update overall system status based on connections
+                    const allConnections = [
+                        msg.data.pi, 
+                        msg.data.esp1, 
+                        msg.data.esp2, 
+                        msg.data.esp3,
+                        msg.data.server
+                    ].filter(x => x !== undefined);
+
+                    if (allConnections.length > 0) {
+                        const allConnected = allConnections.every(x => x === true);
+                        const someConnected = allConnections.some(x => x === true);
+                        
+                        if (allConnected) {
+                            window.Terminal.updateSystemStatus('All devices connected', 'success');
+                        } else if (someConnected) {
+                            window.Terminal.updateSystemStatus('Some devices disconnected', 'warning');
+                        } else {
+                            window.Terminal.updateSystemStatus('All devices disconnected', 'error');
+                        }
+                    }
+                }
+
+                // Handle WebSocket server connection
+                if (msg.type === 'server_status') {
+                    this.toggleStatusElement('Status_Serv', msg.data.connected);
+                    window.Terminal.updateLogicStatus(
+                        `Server connection: ${msg.data.connected ? 'connected' : 'disconnected'}`,
+                        msg.data.connected ? 'success' : 'error'
+                    );
+                }
+
+                // Handle fan PWM updates
+                if (msg.type === 'fan_pwm' && msg.data) {
+                    console.log('Received fan PWM:', msg.data);
+                    if (window.Terminal) {
+                        window.Terminal.updateFanSpeed({
+                            type: 'fan_pwm',
+                            value: msg.data.value
+                        });
+                    }
+                }
+
+                // Handle state updates
+                if (msg.type === 'state') {
+                    this.clientState = msg.data;
+                    if (this.statesDoc) {
+                        let changedButtons = [];
+                        for (let b in this.clientState.buttons) {
+                            const onId = b.replace("_0","_1");
+                            const onElem = this.statesDoc.getElementById(onId);
+                            if (onElem) {
+                                const newOpacity = this.clientState.buttons[b] ? '1' : '0';
+                                if (onElem.style.opacity !== newOpacity) {
+                                    onElem.style.opacity = newOpacity;
+                                    changedButtons.push(b);
+                                }
+                            }
+                        }
+                        if (changedButtons.length > 0) {
+                            console.log('[Controls] Button states changed:', 
+                                changedButtons.map(b => ({
+                                    id: b, 
+                                    state: this.clientState.buttons[b] ? 'on' : 'off'
+                                }))
+                            );
+                        }
+                    }
+                } else if (msg.type !== 'sensor_update') {
+                    // Log all non-sensor messages
+                    console.log('[Controls] Received message:', msg.type);
+                }
+            } catch (err) {
+                console.error('[Controls] Error handling message:', err);
+                window.Terminal.updateSystemStatus('Error processing message', 'error');
+            }
+        }
+    };
+    
+    document.addEventListener('DOMContentLoaded', ()=>{
+        window.ClientLogic.initControlsAndInputs();
+    });
+</script>

@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Control Interface</title>
+
+    <!-- Chart.js + plugin -->
+    <script src="node_modules/chart.js/dist/chart.umd.js"></script>
+    <script src="node_modules/chartjs-plugin-dragdata/dist/chartjs-plugin-dragdata.min.js"></script>
+    <script>
+        Chart.register('chartjs-plugin-dragdata');
+    </script>
+
+    <style>
+        @font-face {
+            font-family: 'Roboto Condensed';
+            src: url('fonts/RobotoCondensed-Regular.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Roboto Condensed';
+            src: url('fonts/RobotoCondensed-Bold.ttf') format('truetype');
+            font-weight: bold;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Noto Sans';
+            src: url('fonts/NotoSans-Regular.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Noto Sans';
+            src: url('fonts/NotoSans-Bold.ttf') format('truetype');
+            font-weight: bold;
+            font-style: normal;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            background-color: #141516;
+            width: 5760px;
+            height: 100vh;
+            overflow-y: hidden;
+            /* Hide scrollbars but keep scrolling functionality */
+            scrollbar-width: none;  /* Firefox */
+            -ms-overflow-style: none;  /* IE and Edge */
+            /* Hide scrollbars but keep scrolling functionality */
+            scrollbar-width: none;  /* Firefox */
+            -ms-overflow-style: none;  /* IE and Edge */
+        }
+
+        /* Hide WebKit (Chrome, Safari, Opera) scrollbars */
+        html::-webkit-scrollbar,
+        body::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Additional rules for Chromium */
+        html::-webkit-scrollbar,
+        body::-webkit-scrollbar {
+            width: 0 !important;
+            height: 0 !important;
+            background: transparent;
+        }
+
+        #interface {
+            position: relative;
+            width: 5760px;
+            height: 100%;
+            overflow-y: hidden;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        #interface::-webkit-scrollbar {
+            display: none;
+            width: 0 !important;
+            height: 0 !important;
+            background: transparent;
+        }
+
+        .svg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #nav-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 1919px;
+            height: 53px;
+            z-index: 1000;
+            margin: 0;
+            padding: 0;
+        }
+        #nav-bar object {
+            position: absolute;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+            display: block;
+        }
+
+        #nav-controls {
+            width: 1919px;
+            height: 53px;
+            z-index: 1;
+        }
+
+        #nav-states {
+            width: 1920px;
+            height: 57px;
+            z-index: 2;
+        }
+
+        #background {
+            z-index: 0;
+        }
+        #controls {
+            z-index: 10;
+            transform: translate(var(--x, 0px), var(--y, 0px));
+        }
+        #states {
+            z-index: 12;
+            pointer-events: none;
+            transform: translate(var(--x, 0px), var(--y, 0px));
+            opacity: 1;
+        }
+
+        .input-overlay {
+            position: absolute;
+            z-index: 13;
+        }
+
+        .setpoint-input {
+            position: absolute;
+            background: transparent;
+            border: none;
+            color: #BBBFC3;
+            font-size: 30px;
+            font-family: 'Roboto', sans-serif;
+            text-align: center;
+            outline: none;
+            padding: 0;
+            margin: 0;
+            -moz-appearance: textfield;
+        }
+        .setpoint-input::-webkit-outer-spin-button,
+        .setpoint-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .setpoint-input::-webkit-calendar-picker-indicator {
+            display: none;
+        }
+        .setpoint-input[type="time"]::-webkit-clear-button {
+            -webkit-appearance: none;
+            display: none;
+        }
+        .setpoint-input:focus {
+            color: #CF3C10;
+        }
+
+        /* Positioning for each setpoint input */
+        #Temp_setpoint {
+            left: 283px;
+            top: 435px;
+            width: 65px;
+            height: 32px;
+        }
+        #Co2_setpoint {
+            left: 1010px;
+            top: 435px;
+            width: 85px;
+            height: 32px;
+        }
+        #VPD_setpoint {
+            left: 645px;
+            top: 435px;
+            width: 85px;
+            height: 32px;
+        }
+        #Sub_EC_setpoint {
+            left: 2065px;
+            top: 920px;
+            width: 125px;
+            height: 50px;
+            font-size: 55px;
+        }
+        #Sub_Moist_setpoint {
+            left: 2655px;
+            top: 920px;
+            width: 125px;
+            height: 50px;
+            font-size: 55px;
+        }
+    
+        #Step_Duration_setpoint {
+            left: 2040px;
+            top: 185px;
+            width: 140px;
+            height: 60px;
+            font-size: 55px;
+            color: #BBBFC3;
+            min: 1;
+            max: 6;
+            step: 1;
+        }
+        #Pulse_Duration_setpoint {
+            left: 2343px;
+            top: 185px;
+            width: 140px;
+            height: 60px;
+            font-size: 55px;
+            color: #BBBFC3;
+        }
+        #Pulse_Interval_setpoint {
+            left: 2635px;
+            top: 185px;
+            width: 140px;
+            height: 60px;
+            font-size: 55px;
+            color: #BBBFC3;
+        }
+        #Event_Count_setpoint {
+            left: 2930px;
+            top: 185px;
+            width: 140px;
+            height: 60px;
+            font-size: 55px;
+            color: #BBBFC3;
+        }
+        #Light_Start_setpoint {
+            left: 3280px;
+            top: 190px;
+            width: 140px;
+            height: 60px;
+            font-size: 55px;
+            color: #BBBFC3;
+        }
+        #Light_Shutdown_setpoint {
+            left: 3280px;
+            top: 400px;
+            width: 140px;
+            height: 60px;
+            font-size: 55px;
+            color: #BBBFC3;
+        }
+        #Sub_EC_Pos_DB_setpoint {
+            left: 2325px;
+            top: 880px;
+            width: 125px;
+            height: 32px;
+            font-size: 30px;
+        }
+        #Sub_EC_Neg_DB_setpoint {
+            left: 2325px;
+            top: 975px;
+            width: 125px;
+            height: 32px;
+            font-size: 30px;
+        }
+        #Sub_Moist_Pos_DB_setpoint {
+            left: 2915px;
+            top: 880px;
+            width: 125px;
+            height: 32px;
+            font-size: 30px;
+        }
+        #Sub_Moist_Neg_DB_setpoint {
+            left: 2915px;
+            top: 975px;
+            width: 125px;
+            height: 32px;
+            font-size: 30px;
+        }
+
+        /* Display value overlays */
+        .display-value {
+            position: absolute;
+            font-family: 'Roboto Condensed', sans-serif;
+            color: #BBBFC3;
+            text-align: center;
+            pointer-events: none;
+            text-shadow: -1px -1px 0 #000,
+                         1px -1px 0 #000,
+                        -1px 1px 0 #000,
+                         1px 1px 0 #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #Temp_display {
+            left: 65px;
+            top: 190px;
+            width: 260px;
+            font-size: 75px;
+            letter-spacing: -0.04em;
+        }
+        #Co2_display {
+            left: 805px;
+            top: 190px;
+            width: 260px;
+            font-size: 75px;
+            letter-spacing: -0.04em;
+        }
+        #VPD_display {
+            left: 420px;
+            top: 190px;
+            width: 260px;
+            font-size: 75px;
+            letter-spacing: -0.04em;
+        }
+        #CanopyTemp_display {
+            left: 55px;
+            top: 295px;
+            width: 260px;
+            font-size: 45px;
+        }
+        #Solution_EC_display {
+            left: 1140px;
+            top: 340px;
+            width: 100px;
+            font-size: 35px;
+        }
+        #Solution_PH_display {
+            left: 1140px;
+            top: 440px;
+            width: 100px;
+            font-size: 35px;
+        }
+        #Sub_EC_display {
+            left: 1140px;
+            top: 245px;
+            width: 100px;
+            font-size: 35px;
+        }
+        #Sub_Moist_display {
+            left: 1140px;
+            top: 140px;
+            width: 100px;
+            font-size: 35px;
+        }
+        #RH_display {
+            left: 430px;
+            top: 295px;
+            width: 260px;
+            font-size: 45px;
+        }
+
+        /* System date/hour */
+        #system_date_display {
+            position: fixed;
+            left: 20px;
+            top: 10px;
+            font-size: 28px;
+            z-index: 1001;
+        }
+        #system_hour_display {
+            position: fixed;
+            left: 290px;
+            top: 10px;
+            font-size: 28px;
+            z-index: 1001;
+        }
+
+        /* Status Terminal Overlay */
+        #status-terminal {
+            position: absolute;
+            left: 1570px;
+            top: 110px;
+            width: 430px;
+            height: 315px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 12px;
+            color: white;
+            pointer-events: none;
+            z-index: 3;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 10px;
+            text-shadow: -1px -1px 0 #000,
+                         1px -1px 0 #000,
+                        -1px 1px 0 #000,
+                         1px 1px 0 #000;
+        }
+        .status-title {
+            color: #BBBFC3;
+            min-height: 16px;
+            line-height: 16px;
+        }
+        .status-line {
+            min-height: 16px;
+            line-height: 16px;
+            margin-bottom: 8px;
+        }
+        .status-success {
+            color: #00FF00;
+        }
+        .status-warning {
+            color: #F3A361;
+        }
+        .status-error {
+            color: #FF0000;
+        }
+
+        /* Navigation Buttons */
+        .nav-left-group {
+            position: absolute;
+            top: 4px;
+            left: 377px;
+            display: flex;
+            gap: 1px;
+            z-index: 1001;
+        }
+
+        .nav-buttons {
+            position: absolute;
+            top: 4px;
+            right: 1171px;
+            display: flex;
+            gap: 1px;
+            z-index: 1001;
+        }
+
+        .nav-old-loc {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            z-index: 1001;
+        }
+
+        .nav-btn {
+            width: 74px;
+            height: 58px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        /* Light Override Confirmation Popup */
+        .popup {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            z-index: 9999;
+            text-align: center;
+            font-size: 24px;
+        }
+        .popup.success { border: 2px solid #4CAF50; }
+        .popup.error { border: 2px solid #f44336; }
+
+        /* Settings Popup Styles */
+        .settings-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #272C31;
+            border: 1px solid rgba(0, 0, 0, 0.34);
+            border-radius: 5px;
+            min-width: 400px;
+            z-index: 1000;
+            box-shadow: 0 4px 4px rgba(0, 0, 0, 0.3),
+                        0 8px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .settings-popup .popup-header {
+            position: relative;
+            background-color: #2F363C;
+            padding: 15px 20px;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.52);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: auto;
+        }
+
+        .settings-popup .popup-content {
+            position: relative;
+            padding: 20px;
+            background-color: #272C31;
+            color: #BBBFC3;
+            top: auto;
+            left: auto;
+            right: auto;
+            bottom: auto;
+            border: none;
+        }
+
+        .settings-popup .popup-footer {
+            position: relative;
+            background-color: #343B42;
+            padding: 15px 20px;
+            border-bottom-left-radius: 5px;
+            border-bottom-right-radius: 5px;
+            border-top: 1px solid rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .settings-popup .close-btn {
+            background: none;
+            border: none;
+            color: #CED9EE;
+            cursor: pointer;
+            font-size: 24px;
+            padding: 0;
+            line-height: 1;
+            position: relative;
+            right: 0;
+            top: 0;
+            width: auto;
+            height: auto;
+        }
+
+        .settings-popup .close-btn:hover {
+            color: #FFFFFF;
+            background: none;
+        }
+
+        .settings-popup h2 {
+            margin: 0;
+            color: #CED9EE;
+            font-size: 18px;
+            font-weight: normal;
+            font-family: 'Roboto Condensed', sans-serif;
+        }
+
+        .settings-popup input {
+            background-color: #1D2125;
+            border: 1px solid rgba(0, 0, 0, 0.34);
+            color: #BBBFC3;
+            padding: 8px 12px;
+            border-radius: 3px;
+            width: calc(100% / 3);
+            margin-top: 5px;
+            font-family: 'Roboto Condensed', sans-serif;
+            -moz-appearance: textfield;
+        }
+
+        .settings-popup input::-webkit-outer-spin-button,
+        .settings-popup input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .settings-popup input[type="number"] {
+            -moz-appearance: textfield;
+        }
+
+        .settings-popup label {
+            display: block;
+            margin-bottom: 15px;
+            color: #CED9EE;
+            font-family: 'Roboto Condensed', sans-serif;
+        }
+
+        .settings-popup button {
+            background-color: #2F363C;
+            border: 1px solid rgba(0, 0, 0, 0.34);
+            color: #CED9EE;
+            padding: 8px 16px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-family: 'Roboto Condensed', sans-serif;
+        }
+
+        .settings-popup button:hover {
+            background-color: #234D65;
+        }
+
+        .settings-popup button.save {
+            background-color: #577F5F;
+            color: #FFFFFF;
+        }
+
+        .settings-popup button.save:hover {
+            background-color: #6B9674;
+        }
+
+        .settings-popup .settings-section h3 {
+            color: #CED9EE;
+            font-size: 16px;
+            margin: 0 0 20px 0;
+            font-weight: normal;
+            font-family: 'Roboto Condensed', sans-serif;
+        }
+
+        .settings-popup .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .settings-popup .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Overlay styles */
+        .popup-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+
+        .settings-popup.show,
+        .popup-overlay.show {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+<div id="nav-bar">
+    <!-- Existing SVG objects (unchanged) -->
+    <object id="nav-controls" class="svg-layer" type="image/svg+xml" data="SVG/Bar_On_Top.svg"></object>
+    <object id="nav-states"   class="svg-layer" type="image/svg+xml" data="SVG/Bar_On_Top_1.svg"></object>
+
+    <!-- 1) Left group: two new buttons -->
+    <div class="nav-left-group">
+        <button id="Btn_Microscope_0"  class="nav-btn" data-btn-id="Btn_Microscope"></button>
+        <button id="Btn_Settings_0"    class="nav-btn" data-btn-id="Btn_Settings"></button>
+    </div>
+
+    <!-- 2) Middle group: existing scrolling buttons -->
+    <div class="nav-buttons">
+        <button id="nav-left"  class="nav-btn" data-btn-id="Btn_Scroll_Left"></button>
+        <button id="nav-mid"   class="nav-btn" data-btn-id="Btn_Scroll_Mid"></button>
+        <button id="nav-right" class="nav-btn" data-btn-id="Btn_Scroll_Right"></button>
+    </div>
+
+    <!-- 3) Old location: Fullscreen button -->
+    <div class="nav-old-loc">
+        <button id="Btn_Fullscreen" class="nav-btn" data-btn-id="Btn_Fullscreen"></button>
+    </div>
+</div>
+
+    <div id="interface">
+        <!-- Base Layers -->
+        <object id="background" class="svg-layer" type="image/svg+xml" data="SVG/Main.svg"></object>
+        <object id="controls" class="svg-layer" type="image/svg+xml" data="SVG/Main_Interactive_Layer_Off.svg"></object>
+        <object id="states" class="svg-layer" type="image/svg+xml" data="SVG/Main_Interactive_Layer_On.svg"></object>
+
+        <!-- Chart Containers -->
+        <div id="stacked-chart"
+             style="position: absolute; left: 0px; top: 547px; width: 1225px; height: 519px;
+                    background: transparent; border-radius: 0px; z-index: 10;">
+        </div>
+        <div id="thermal-map"
+             style="position: absolute; left: 1080px; top: 510px; width: 820px; height: 550px;
+                    background: transparent; border-radius: 0px; z-index: 11;">
+        </div>
+        <div id="hardware-bar-chart"
+             style="position: absolute; left: 0px; top: 918px; width: 1225px; height: 150px;
+                    background: transparent; border-radius: 0px; z-index: 11;">
+        </div>
+
+        <!-- Hardware charts - one for each device -->
+        <div id="heater-chart"
+             style="position: absolute; left: 0px; top: 1019px; width: 1225px; height: 18px;
+                    background: transparent; border-radius: 0px; z-index: 11;">
+        </div>
+        <div id="co2-chart"
+             style="position: absolute; left: 0px; top: 1037px; width: 1225px; height: 18px;
+                    background: transparent; border-radius: 0px; z-index: 11;">
+        </div>
+        <div id="dehum-chart"
+             style="position: absolute; left: 0px; top: 1025px; width: 1225px; height: 18px;
+                    background: transparent; border-radius: 0px; z-index: 11;">
+        </div>
+        <div id="hum-chart"
+             style="position: absolute; left: 0px; top: 1031px; width: 1225px; height: 18px;
+                    background: transparent; border-radius: 0px; z-index: 11;">
+        </div>
+
+        <!-- Status Terminal Overlay -->
+        <div id="status-terminal">
+            <div class="status-title">Control Logic:</div>
+            <div id="gui-status" class="status-line">Waiting for input...</div>
+            <div class="status-title">Last Command:</div>
+            <div id="logic-status" class="status-line">Monitoring...</div>
+            <div class="status-title">System Status:</div>
+            <div id="system-status" class="status-line status-success">Running normally</div>
+            <div class="status-title">Last Pi Update:</div>
+            <div id="pi-status" class="status-line">--:--</div>
+        </div>
+
+        <!-- Display Value Overlays -->
+        <div class="display-overlay">
+            <div id="Temp_display" class="display-value">--.-°</div>
+            <div id="Co2_display" class="display-value">----</div>
+            <div id="VPD_display" class="display-value">-.--</div>
+            <div id="CanopyTemp_display" class="display-value">--.-</div>
+            <div id="Solution_EC_display" class="display-value">-.--</div>
+            <div id="Solution_PH_display" class="display-value">-.--</div>
+            <div id="Sub_EC_display" class="display-value">-.--</div>
+            <div id="Sub_Moist_display" class="display-value">--%</div>
+            <div id="RH_display" class="display-value">--.-</div>
+            <div id="system_date_display" class="display-value">--/--/----</div>
+            <div id="system_hour_display" class="display-value">--:--</div>
+        </div>
+
+        <!-- Input Overlays -->
+        <div class="input-overlay">
+            <input type="number" id="Temp_setpoint" class="setpoint-input" step="0.1" min="10.0" max="99.9">
+            <input type="number" id="Co2_setpoint" class="setpoint-input" step="1">
+            <input type="number" id="VPD_setpoint" class="setpoint-input" step="0.1" min="0" max="9.9">
+            <input type="number" id="Step_Duration_setpoint" class="setpoint-input" step="1" min="1" max="6" value="1">
+            <input type="number" id="Sub_EC_setpoint" class="setpoint-input" step="0.01">
+            <input type="number" id="Sub_Moist_setpoint" class="setpoint-input" step="0.1">
+            <input type="number" id="Pulse_Duration_setpoint" class="setpoint-input" step="1" min="0" max="99">
+            <input type="number" id="Pulse_Interval_setpoint" class="setpoint-input" step="1" min="0" max="99">
+            <input type="number" id="Event_Count_setpoint" class="setpoint-input" step="1" min="0" max="99">
+            <input type="time"   id="Light_Start_setpoint" class="setpoint-input" step="60">
+            <input type="time"   id="Light_Shutdown_setpoint" class="setpoint-input" step="60">
+
+            <!-- Deadband setpoint inputs -->
+            <input type="number" id="Sub_EC_Pos_DB_setpoint"     class="setpoint-input" step="0.01">
+            <input type="number" id="Sub_EC_Neg_DB_setpoint"     class="setpoint-input" step="0.01">
+            <input type="number" id="Sub_Moist_Pos_DB_setpoint"  class="setpoint-input" step="0.1">
+            <input type="number" id="Sub_Moist_Neg_DB_setpoint"  class="setpoint-input" step="0.1">
+        </div>
+
+        <!-- Settings Popup -->
+        <div id="settings-popup" class="settings-popup">
+            <div class="popup-header">
+                <h2>System Settings</h2>
+                <button class="close-btn" onclick="document.getElementById('popup-overlay').click()">&times;</button>
+            </div>
+            <div class="popup-content">
+                <div class="settings-section">
+                    <h3>Hysteresis Settings</h3>
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <label for="temp-hyst">Temperature (°C)</label>
+                            <input type="number" id="temp-hyst" step="0.1" min="0" max="5" value="0.5">
+                        </div>
+                        <div class="setting-item">
+                            <label for="vpd-hyst">VPD (kPa)</label>
+                            <input type="number" id="vpd-hyst" step="0.01" min="0" max="1" value="0.1">
+                        </div>
+                        <div class="setting-item">
+                            <label for="co2-hyst">CO2 (ppm)</label>
+                            <input type="number" id="co2-hyst" step="10" min="0" max="200" value="50">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="popup-footer">
+                <button class="save" onclick="saveHysteresisSettings()">Save Changes</button>
+                <button onclick="document.getElementById('popup-overlay').click()">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Status Container -->
+        <div class="status-container">
+            <div id="fan-status" class="status-line"></div>
+        </div>
+    </div>
+
+    <!-- Include microscope window -->
+    <!--#include virtual="microscope.shtml" -->
+
+    <!-- Server-Side Includes -->
+    <!--#include virtual="/Embedded_Terminal.shtml" -->
+    <!--#include virtual="/controls_and_inputs.shtml" -->
+    <!--#include virtual="/gauge.shtml" -->
+    <!--#include virtual="/fan_curves.shtml" -->
+    <!--#include virtual="/Chart.shtml" -->
+    <!--#include virtual="/realtime_labels.shtml" -->
+
+    <!-- Charts -->
+    <div style="position: absolute; left: 3955px; top: 140px; width: 815px; height: 808px;">
+        <div style="position: relative; z-index: 1000; width: 100%; height: 100%;">
+            <canvas id="myChart1" style="width: 100%; height: 100%;"></canvas>
+        </div>
+    </div>
+    <div style="position: absolute; left: 4908px; top: 140px; width: 815px; height: 808px;">
+        <div style="position: relative; z-index: 1000; width: 100%; height: 100%;">
+            <canvas id="myChart2" style="width: 100%; height: 100%;"></canvas>
+        </div>
+    </div>
+
+    <!-- Popup Overlay -->
+    <div id="popup-overlay" class="popup-overlay"></div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const stepDurationInput = document.getElementById('Step_Duration_setpoint');
+        if (stepDurationInput) {
+            // Set HTML attributes
+            stepDurationInput.setAttribute('min', '1');
+            stepDurationInput.setAttribute('max', '6');
+            stepDurationInput.setAttribute('value', '1');
+
+            // Handle direct input
+            stepDurationInput.addEventListener('input', function(e) {
+                let value = parseInt(this.value);
+                if (isNaN(value) || value < 1) {
+                    this.value = '1';
+                } else if (value > 6) {
+                    this.value = '6';
+                }
+            });
+
+            // Handle increment/decrement
+            stepDurationInput.addEventListener('keydown', function(e) {
+                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    let currentValue = parseInt(this.value) || 1;
+                    
+                    if (e.key === 'ArrowUp') {
+                        currentValue = currentValue >= 6 ? 1 : currentValue + 1;
+                    } else {
+                        currentValue = currentValue <= 1 ? 6 : currentValue - 1;
+                    }
+                    
+                    this.value = currentValue;
+                }
+            });
+
+            // Handle blur to ensure valid value
+            stepDurationInput.addEventListener('blur', function() {
+                let value = parseInt(this.value);
+                if (isNaN(value) || value < 1) {
+                    this.value = '1';
+                } else if (value > 6) {
+                    this.value = '6';
+                }
+            });
+        }
+    });
+
+    // Settings popup functionality
+    function toggleSettingsPopup() {
+        const popup = document.getElementById('settings-popup');
+        const overlay = document.getElementById('popup-overlay');
+        
+        if (popup.classList.contains('show')) {
+            popup.classList.remove('show');
+            overlay.classList.remove('show');
+        } else {
+            popup.classList.add('show');
+            overlay.classList.add('show');
+            
+            // Load current hysteresis values if available
+            if (window.ClientLogic.state && window.ClientLogic.state.hysteresis) {
+                document.getElementById('temp-hyst').value = window.ClientLogic.state.hysteresis.temperature || 0.5;
+                document.getElementById('vpd-hyst').value = window.ClientLogic.state.hysteresis.vpd || 0.1;
+                document.getElementById('co2-hyst').value = window.ClientLogic.state.hysteresis.co2 || 50;
+                
+                // Store original values
+                ['temp-hyst', 'vpd-hyst', 'co2-hyst'].forEach(id => {
+                    const input = document.getElementById(id);
+                    if (input) {
+                        input.dataset.originalValue = input.value;
+                    }
+                });
+            }
+        }
+    }
+
+    function saveHysteresisSettings() {
+        const tempHyst = document.getElementById('temp-hyst').value;
+        const vpdHyst = document.getElementById('vpd-hyst').value;
+        const co2Hyst = document.getElementById('co2-hyst').value;
+
+        fetch('/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'hysteresis',
+                settings: {
+                    temperature: parseFloat(tempHyst),
+                    vpd: parseFloat(vpdHyst),
+                    co2: parseInt(co2Hyst)
+                }
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.Terminal.updateGuiStatus('Hysteresis settings saved successfully', 'success');
+                toggleSettingsPopup(); // Close popup
+                // Toggle button state back
+                const button = document.getElementById('Btn_Settings_1');
+                if (button) {
+                    button.id = 'Btn_Settings_0';
+                }
+            } else {
+                window.Terminal.updateGuiStatus('Failed to save hysteresis settings', 'error');
+            }
+        })
+        .catch(error => {
+            window.Terminal.updateGuiStatus('Error saving hysteresis settings: ' + error.message, 'error');
+        });
+    }
+
+    // Add click handler to settings button
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize hysteresis input handlers
+        const hysteresisInputs = ['temp-hyst', 'vpd-hyst', 'co2-hyst'];
+        
+        hysteresisInputs.forEach(id => {
+            const input = document.getElementById(id);
+            if (input) {
+                // Store original value when focusing
+                input.addEventListener('focus', function() {
+                    this.dataset.originalValue = this.value;
+                });
+
+                // Restore original value if ESC is pressed
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
+                        this.value = this.dataset.originalValue || '';
+                    }
+                });
+
+                // Validate input but don't send updates
+                input.addEventListener('input', function() {
+                    const min = parseFloat(this.min);
+                    const max = parseFloat(this.max);
+                    const value = parseFloat(this.value);
+                    
+                    if (!isNaN(value)) {
+                        if (value < min) this.value = min;
+                        if (value > max) this.value = max;
+                    }
+                });
+            }
+        });
+
+        // Add click handler for settings button
+        const settingsBtn = document.getElementById('Btn_Settings_0');
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', function() {
+                // Toggle button state
+                if (this.id.endsWith('_0')) {
+                    this.id = this.id.replace('_0', '_1');
+                } else {
+                    this.id = this.id.replace('_1', '_0');
+                }
+                toggleSettingsPopup();
+            });
+        }
+    });
+
+    // Close popup when clicking overlay
+    document.getElementById('popup-overlay').addEventListener('click', function() {
+        // Restore original values when closing without saving
+        ['temp-hyst', 'vpd-hyst', 'co2-hyst'].forEach(id => {
+            const input = document.getElementById(id);
+            if (input && input.dataset.originalValue) {
+                input.value = input.dataset.originalValue;
+            }
+        });
+        toggleSettingsPopup();
+        // Toggle button state back
+        const button = document.getElementById('Btn_Settings_1');
+        if (button) {
+            button.id = 'Btn_Settings_0';
+        }
+    });
+    </script>
+</body>
+</html>

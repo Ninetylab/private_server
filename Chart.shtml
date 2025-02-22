@@ -1,0 +1,1004 @@
+<!-- Chart.shtml -->
+
+<!-- 1) ECharts library -->
+<script src="EChart/echarts.min.js"></script>
+
+<style>
+/* Minimal styling just for pointer events */
+.hardware-chart {
+    pointer-events: auto;
+    background: transparent;
+}
+
+/* Dropdown styling */
+.dropdown-menu {
+    display: none;
+    position: fixed;
+    background-color: #303C4D;
+    border: 1px solid #161616;
+    border-radius: 3px;
+    padding: 5px 0;
+    min-width: 150px;
+    z-index: 9999;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
+}
+
+.dropdown-menu.show {
+    display: block;
+}
+
+.dropdown-item {
+    padding: 12px 20px;
+    color: #BBBFC3;
+    font-family: 'Roboto Condensed', sans-serif;
+    font-size: 18px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.2s;
+}
+
+.dropdown-item:hover {
+    background-color: #234D65;
+    color: #FFFFFF;
+}
+</style>
+
+<script>
+console.log('[Chart] Initializing');
+
+// References to your original chart + thermal map
+window.stackedChart = null;
+window.thermalMap   = null;
+
+// Reference for hardware charts
+window.hardwareCharts = {};  // Initialize as empty object
+
+// Color palette for different hardware devices
+const colors = {
+    'co2_valve': '#21C85C',
+    'heater': '#F34972',
+    'humidity': '#5E81AC',
+    'dehumidifier': '#F7F17E',
+    'humidifier': '#0867AC',
+    'default': '#88C0D0'
+};
+
+/**
+ * Data buffers for the main chart
+ */
+const dataBuffer = {
+    temp: [],
+    humidity: [],
+    co2: [],
+    vpd: [],
+    timestamps: []
+};
+
+/** 
+ * Data array for the hardware bar chart: each point => [timestamp, 0.25 or 0.75].
+ */
+let hardwareBarData = [];
+
+// Define vertical positions globally so they can be used by both init and update functions
+const devicePositions = {
+    'heater': { low: 0.0, high: 0.25, base: 0.0 },
+    'co2_valve': { low: 0.25, high: 0.5, base: 0.25 },
+    'dehumidifier': { low: 0.5, high: 0.75, base: 0.5 },
+    'humidifier': { low: 0.75, high: 1.0, base: 0.75 }
+};
+
+/* 
+   -------------------------------
+   (1) Initialize your main chart
+   -------------------------------
+   This is essentially your original code, with setOption(...) unchanged,
+   placed in a function for clarity.
+*/
+function initMainChart() {
+    const stackedChartElement = document.getElementById('stacked-chart');
+    const thermalMapElement   = document.getElementById('thermal-map');
+    
+    if (!stackedChartElement || !thermalMapElement) {
+        console.error('[Chart] Missing chart containers');
+        return;
+    }
+
+    window.stackedChart = echarts.init(stackedChartElement);
+    window.thermalMap   = echarts.init(thermalMapElement);
+    console.log('[Chart] Main chart + thermal map initialized');
+
+    // -------------------------
+    // Your original setOption()
+    // -------------------------
+    window.stackedChart.setOption({
+        backgroundColor: 'transparent',
+        legend: { 
+            show: false,
+            textStyle: { color: '#fff' }
+        },
+        dataZoom: [
+            {
+                type: 'inside',
+                show: false,
+                xAxisIndex: [0],
+                bottom: 10,
+                height: 20,
+                borderColor: 'transparent',
+                backgroundColor: 'rgba(47, 69, 84, 0.3)',
+                fillerColor: 'rgba(167, 183, 204, 0.2)',
+                textStyle: { color: '#fff' },
+                handleIcon: 'path://M306.1,413c0,2.2-1.8,4-4,4h-59.8c-2.2,0-4-1.8-4-4V200.8c0-2.2,1.8-4,4-4h59.8c2.2,0,4,1.8,4,4V413z',
+                handleSize: '110%',
+                handleStyle: {
+                    color: '#577F5F',
+                    shadowBlur: 3,
+                    shadowColor: 'rgba(0, 0, 0, 0.6)',
+                    shadowOffsetX: 2,
+                    shadowOffsetY: 2
+                }
+            },
+            {
+                type: 'inside',
+                xAxisIndex: [0]
+            }
+        ],
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+                type: 'cross',
+                animation: true,
+                lineStyle: {
+                    color: '#ECEFF4',
+                    opacity: 0.3,
+                    width: 1
+                },
+                label: {
+                    backgroundColor: '#2E3440',
+                    borderColor: '#4C566A',
+                    borderWidth: 1,
+                    padding: [5, 8],
+                    textStyle: {
+                        color: '#ECEFF4'
+                    }
+                },
+                shadowStyle: {
+                    color: 'rgba(46, 52, 64, 0.2)'
+                }
+            },
+            backgroundColor: 'rgba(46, 52, 64, 0.8)',
+            borderColor: '#4C566A',
+            borderWidth: 1,
+            textStyle: {
+                color: '#E5E9F0'
+            },
+            formatter: function(params) {
+                if (!params.length) return '';
+                const time = new Date(params[0].value[0]);
+                let result = `${time.getHours().toString().padStart(2, '0')}:`
+                           + `${time.getMinutes().toString().padStart(2, '0')}\n`;
+                params.forEach(param => {
+                    let color;
+                    switch(param.seriesName) {
+                        case 'CO2':          color = '#577F5F';   break;
+                        case 'VPD':          color = '#1C69A0';   break;
+                        case 'Temperature':   color = '#E85C33';   break;
+                        case 'Humidity':      color = '#80BFEC';   break;
+                        default:             color = '#fff';       break;
+                    }
+                    result += `<span style="color:${color}">${param.seriesName}: `
+                            + `${param.value[1].toFixed(1)}</span>\n`;
+                });
+                return result;
+            }
+        },
+        grid: {
+            left: '3.8%',
+            right: '15%',
+            bottom: '5.5%',
+            top: '0%',
+            containLabel: true,
+            backgroundColor: 'transparent',
+            borderColor: '#434C5E',
+            show: true
+        },
+        xAxis: {
+            type: 'time',
+            boundaryGap: true,
+            offset: 25,
+            axisLine: { 
+                show: true,
+                lineStyle: { color: '#fff', opacity: 0.5 } 
+            },
+            axisLabel: {
+                show: true,
+                color: '#fff',
+                formatter: function(value) {
+                    const date = new Date(value);
+                    return `${date.getHours().toString().padStart(2, '0')}:`
+                         + `${date.getMinutes().toString().padStart(2, '0')}`;
+                }
+            },
+            splitLine: {
+                show: true,
+                lineStyle: { color: 'rgba(255,255,255,0.1)', type: 'dashed' }
+            }
+        },
+        yAxis: [
+            {
+                type: 'value',
+                position: 'left',
+                min: 0, max: 2000, interval: 500,
+                splitArea: { show: false },
+                axisLine: { lineStyle: { color: '#fff' } },
+                splitLine: {
+                    show: true,
+                    lineStyle: { color: 'rgba(255,255,255,0.1)', type: 'dashed' }
+                },
+                axisTick: { show: false },
+                axisLabel: { show: false }
+            },
+            {
+                type: 'value',
+                min: 0,
+                max: 1,
+                interval: 0.25,
+                axisLine: { show: true },
+                axisTick: { show: true },
+                axisLabel: {
+                    show: true,
+                    color: '#fff',
+                    fontSize: 10,
+                    formatter: function(value) {
+                        if (value === 0.125) return 'Heater';
+                        if (value === 0.375) return 'CO2';
+                        if (value === 0.625) return 'Dehum';
+                        if (value === 0.875) return 'Hum';
+                        return '';
+                    }
+                },
+                splitLine: {
+                    show: true,
+                    lineStyle: { color: 'rgba(255,255,255,0.1)', type: 'dashed' }
+                }
+            },
+            {
+                type: 'value',
+                position: 'right',
+                min: 15, 
+                max: 35, 
+                interval: 5,
+                boundaryGap: ['10%', '10%'],
+                splitArea: { show: false },
+                axisLine: { lineStyle: { color: '#fff' } },
+                splitLine: { show: false },
+                axisTick: { show: false },
+                axisLabel: { show: false }
+            },
+            {
+                type: 'value',
+                position: 'right',
+                offset: 60,
+                min: 0, max: 100, interval: 25,
+                splitArea: { show: false },
+                axisLine: { lineStyle: { color: '#fff' } },
+                splitLine: { show: false },
+                axisTick: { show: false },
+                axisLabel: { show: false }
+            }
+        ],
+        series: [
+            {
+                name: 'VPD',
+                type: 'line',
+                yAxisIndex: 0,
+                showSymbol: false,
+                smooth: 0.2,
+                z: 1,
+                lineStyle: {
+                    width: 4,
+                    color: '#1C69A0'
+                },
+                areaStyle: {
+                    color: '#1C69A0',
+                    opacity: 0.4
+                },
+                data: []
+            },
+            {
+                name: 'Temperature',
+                type: 'line',
+                yAxisIndex: 2,
+                showSymbol: false,
+                smooth: 0.2,
+                z: 3,
+                lineStyle: {
+                    width: 4,
+                    color: '#E85C33'
+                },
+                areaStyle: {
+                    color: '#E85C33',
+                    opacity: 0.7
+                },
+                data: []
+            },
+            {
+                name: 'CO2',
+                type: 'line',
+                yAxisIndex: 0,
+                showSymbol: false,
+                smooth: 0.3,
+                z: 4,
+                lineStyle: {
+                    width: 4,
+                    color: '#479F66'
+                },
+                areaStyle: {
+                    color: {
+                        type: 'linear',
+                        x: 0, y: 0, x2: 0, y2: 1,
+                        colorStops: [{
+                            offset: 0,
+                            color: 'rgba(87, 127, 95, 0.15)'
+                        }, {
+                            offset: 1,
+                            color: 'rgba(87, 127, 95, 0.0)'
+                        }]
+                    }
+                },
+                data: []
+            },
+            {
+                name: 'Humidity',
+                type: 'line',
+                yAxisIndex: 3,
+                showSymbol: false,
+                smooth: 0.2,
+                z: 5,
+                lineStyle: {
+                    width: 6,
+                    color: '#80BFEC',
+                    type: 'dashed',
+                    dashOffset: 0,
+                    dash: [10, 10]
+                },
+                areaStyle: {
+                    color: {
+                        type: 'linear',
+                        x: 0, y: 0, x2: 0, y2: 1,
+                        colorStops: [{
+                            offset: 0,
+                            color: 'rgba(128, 191, 236, 0.15)'
+                        }, {
+                            offset: 1,
+                            color: 'rgba(128, 191, 236, 0.0)'
+                        }]
+                    }
+                },
+                data: []
+            }
+        ]
+    });
+
+    // Mouse wheel zoom inside the main chart
+    window.stackedChart.setOption({
+        dataZoom: [{
+            type: 'inside',
+            xAxisIndex: 0,
+            filterMode: 'none',
+            zoomLock: false,
+            zoomOnMouseWheel: true,
+            moveOnMouseMove: true
+        }]
+    });
+
+    // Resize watchers
+    window.addEventListener('resize', () => {
+        window.stackedChart.resize();
+        window.thermalMap.resize();
+    });
+
+    // Initialize the thermalMap
+    initThermalMap(window.thermalMap);
+
+    // Finally, fetch sensor data
+    fetchHistoricalData();
+}
+
+function initThermalMap(thermalMapInstance) {
+    thermalMapInstance.setOption({
+        backgroundColor: 'transparent',
+        tooltip: {
+            position: 'top',
+            formatter: function(params) {
+                return `Temperature: ${params.data[2].toFixed(1)}°C`;
+            }
+        },
+        grid: {
+            top: '7.1%',
+            right: '2.1%',
+            bottom: '3.5%',
+            left: '1.7%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'category',
+            data: Array.from({ length: 16 }, (_, i) => i),
+            splitArea: { show: true },
+            axisLine: { show: false, lineStyle: { color: '#fff' } },
+            axisLabel: { show: false, color: '#fff' },
+            axisTick: { show: false }
+        },
+        yAxis: {
+            type: 'category',
+            data: Array.from({ length: 8 }, (_, i) => i),
+            splitArea: { show: true },
+            axisLine: { show: false, lineStyle: { color: '#fff' } },
+            axisLabel: { show: false, color: '#fff' },
+            axisTick: { show: false }
+        },
+        visualMap: {
+            min: 15,
+            max: 35,
+            calculable: true,
+            orient: 'horizontal',
+            left: 'center',
+            bottom: '0%',
+            textStyle: { 
+                color: '#fff',
+                opacity: 0.3
+            },
+            inRange: {
+                color: [
+                  '#313695','#4575b4','#74add1','#abd9e9',
+                  '#fee090','#fdae61','#f46d43','#d73027'
+                ]
+            },
+            opacity: 0.3,
+            emphasis: {
+                opacity: 1
+            }
+        },
+        series: [{
+            name: 'Thermal Map',
+            type: 'heatmap',
+            data: [],
+            label: {
+                show: true,
+                color: '#000000',
+                fontSize: 14,
+                formatter: function(params) {
+                    return params.data[2].toFixed(1);
+                }
+            },
+            emphasis: {
+                itemStyle: {
+                    shadowBlur: 10,
+                    shadowColor: 'rgba(0, 0, 0, 0.5)'
+                }
+            }
+        }]
+    });
+}
+
+/* 
+   -----------------------------
+   (2) Initialize Hardware Chart
+   -----------------------------
+   Separate ECharts instance for hardware states
+   Uses stepped lines to show ON/OFF states
+*/
+function initHardwareCharts() {
+    // Initialize the hardware charts object if not already done
+    window.hardwareCharts = {};
+
+    const chartConfigs = [
+        { 
+            id: 'heater-chart', 
+            device: 'heater', 
+            label: 'Heater',
+            grid: {
+                left: 45,
+                right: 192,
+                top: 0,
+                bottom: 30,
+                height: 6,
+                containLabel: false
+            }
+        },
+        { 
+            id: 'co2-chart', 
+            device: 'co2_valve', 
+            label: 'CO2',
+            grid: {
+                left: 45,
+                right: 192,
+                top: 0,
+                bottom: 30,
+                height: 6,
+                containLabel: false
+            }
+        },
+        { 
+            id: 'dehum-chart', 
+            device: 'dehumidifier', 
+            label: 'Dehum',
+            grid: {
+                left: 45,
+                right: 192,
+                top: 0,
+                bottom: 30,
+                height: 6,
+                containLabel: false
+            }
+        },
+        { 
+            id: 'hum-chart', 
+            device: 'humidifier', 
+            label: 'Hum',
+            grid: {
+                left: 45,
+                right: 192,
+                top: 0,
+                bottom: 20,
+                height: 6,
+                containLabel: false
+            }
+        }
+    ];
+
+    chartConfigs.forEach(config => {
+        const el = document.getElementById(config.id);
+        if (!el) {
+            console.error(`[Chart] Missing ${config.id} container`);
+            return;
+        }
+
+        const chart = echarts.init(el);
+        window.hardwareCharts[config.device] = chart;
+
+        // Basic step line chart configuration
+        chart.setOption({
+            animation: false,
+            grid: config.grid,
+            dataZoom: [{
+                type: 'inside',
+                xAxisIndex: 0,
+                filterMode: 'none',
+                zoomLock: false,
+                zoomOnMouseWheel: true,
+                moveOnMouseMove: true
+            }],
+            xAxis: {
+                type: 'time',
+                boundaryGap: true,
+                axisLine: { show: false },
+                axisTick: { show: false },
+                axisLabel: { show: false },
+                splitLine: {
+                    show: true,
+                    lineStyle: { color: 'rgba(255,255,255,0.1)', type: 'dashed' }
+                }
+            },
+            yAxis: {
+                type: 'value',
+                min: 0,
+                max: 1,
+                axisLine: { show: false },
+                axisTick: { show: false },
+                axisLabel: { show: false },
+                splitLine: { show: false }
+            },
+            series: [{
+                name: config.label,
+                type: 'line',
+                step: 'end',
+                showSymbol: false,
+                lineStyle: {
+                    width: 1,
+                    color: colors[config.device]
+                },
+                areaStyle: {
+                    color: colors[config.device],
+                    opacity: 1
+                },
+                data: []
+            }]
+        });
+
+        // Add resize handler
+        window.addEventListener('resize', () => {
+            chart.resize();
+        });
+    });
+
+    // Link zooming between all charts
+    if (window.stackedChart) {
+        window.stackedChart.on('dataZoom', function(params) {
+            const option = window.stackedChart.getOption();
+            const startValue = option.dataZoom[0].startValue;
+            const endValue = option.dataZoom[0].endValue;
+            
+            Object.values(window.hardwareCharts).forEach(chart => {
+                if (chart) {
+                    chart.setOption({
+                        dataZoom: [{
+                            type: 'inside',
+                            startValue: startValue,
+                            endValue: endValue
+                        }],
+                        xAxis: { 
+                            min: startValue,
+                            max: endValue
+                        }
+                    });
+                }
+            });
+        });
+
+        // Also sync initial time range
+        const option = window.stackedChart.getOption();
+        if (option.dataZoom && option.dataZoom[0]) {
+            const startValue = option.dataZoom[0].startValue;
+            const endValue = option.dataZoom[0].endValue;
+            Object.values(window.hardwareCharts).forEach(chart => {
+                if (chart) {
+                    chart.setOption({
+                        dataZoom: [{
+                            type: 'inside',
+                            startValue: startValue,
+                            endValue: endValue
+                        }],
+                        xAxis: { 
+                            min: startValue,
+                            max: endValue
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    // Initial data fetch
+    fetchHardwareHistory(24);
+}
+
+/* 
+   -----------
+   3) Data Fetch
+   -----------
+   A) For sensors => your existing fetchHistoricalData
+*/
+async function fetchHistoricalData(hours = 24) {
+    try {
+        const endTime   = Date.now();
+        const startTime = endTime - (hours * 60 * 60 * 1000);
+        
+        const response = await fetch(
+          `/api/sensor-history?start=${startTime}&end=${endTime}&interval=5`
+        );
+        if (!response.ok) {
+            console.error('[Chart] Failed to fetch historical data:', response.statusText);
+            return;
+        }
+        
+        const { data } = await response.json();
+        console.log(`[Chart] Fetched ${data.length} historical data points`);
+
+        // Initialize data buffers with historical data
+        dataBuffer.temp = [];
+        dataBuffer.humidity = [];
+        dataBuffer.co2 = [];
+        dataBuffer.vpd = [];
+        
+        data.forEach(point => {
+            dataBuffer.temp.push([point.timestamp, point.temperature]);
+            dataBuffer.humidity.push([point.timestamp, point.humidity]);
+            dataBuffer.co2.push([point.timestamp, point.co2]);
+            dataBuffer.vpd.push([point.timestamp, point.vpd * 1000]);
+        });
+        
+        if (window.stackedChart) {
+            window.stackedChart.setOption({
+                xAxis: {
+                    min: startTime,
+                    max: endTime
+                },
+                series: [
+                    { name: 'VPD',         data: dataBuffer.vpd },
+                    { name: 'Temperature', data: dataBuffer.temp },
+                    { name: 'CO2',         data: dataBuffer.co2 },
+                    { name: 'Humidity',    data: dataBuffer.humidity }
+                ]
+            });
+
+            // Sync hardware charts with the same time range
+            Object.values(window.hardwareCharts).forEach(chart => {
+                if (chart) {
+                    chart.setOption({
+                        xAxis: { min: startTime, max: endTime }
+                    });
+                }
+            });
+        }
+    } catch (error) {
+        console.error('[Chart] Error fetching historical data:', error);
+    }
+}
+
+/* 
+   B) For hardware => fetchHardwareHistory() 
+   Process hardware events into stepped line series
+*/
+async function fetchHardwareHistory(hours = 24) {
+    try {
+        const endTime = Date.now();
+        const startTime = endTime - (hours * 60 * 60 * 1000);
+
+        const response = await fetch(
+            `/api/hardware-history?start=${startTime}&end=${endTime}`
+        );
+        if (!response.ok) return;
+
+        const { data } = await response.json();
+        if (!data || !Array.isArray(data)) return;
+
+        // Group events by device
+        const deviceGroups = {};
+        data.forEach(event => {
+            const displayName = event.hardwareId.replace('_plus', '');
+            if (!deviceGroups[displayName]) {
+                deviceGroups[displayName] = [];
+            }
+            deviceGroups[displayName].push({
+                ...event,
+                hardwareId: displayName
+            });
+        });
+
+        // Update each chart with its data
+        Object.entries(deviceGroups).forEach(([hardwareId, events]) => {
+            const chart = window.hardwareCharts[hardwareId];
+            if (!chart) return;
+
+            // Sort events by timestamp
+            events.sort((a, b) => a.timestamp - b.timestamp);
+
+            // Create data points with proper timestamps
+            let lineData = [];
+            
+            // Add initial state if needed
+            if (events.length > 0 && events[0].timestamp > startTime) {
+                lineData.push([startTime, 0]); // Assume OFF state if no data
+            }
+
+            // Add all events
+            events.forEach(event => {
+                lineData.push([event.timestamp, event.value ? 1 : 0]);
+            });
+
+            // Add final point to maintain current state
+            if (lineData.length > 0) {
+                lineData.push([endTime, lineData[lineData.length - 1][1]]);
+            }
+
+            // Update the chart with the same time range as environmental chart
+            chart.setOption({
+                xAxis: { min: startTime, max: endTime },
+                series: [{
+                    data: lineData
+                }]
+            });
+        });
+    } catch (error) {
+        console.error('[Chart] Error in fetchHardwareHistory:', error);
+    }
+}
+
+/* 
+   -------------
+   4) Realtime
+   -------------
+   A) updateChartData => original sensor updates 
+*/
+window.updateChartData = function(newData) {
+    const timestamp = Date.now();
+    
+    // Get current time range from the chart
+    const currentOption = window.stackedChart.getOption();
+    const currentMin = currentOption.xAxis[0].min;
+    const currentMax = currentOption.xAxis[0].max;
+    
+    // Add new data points
+    dataBuffer.co2.push([timestamp, newData.co2 || 0]);
+    dataBuffer.vpd.push([timestamp, (newData.vpd || 0) * 1000]);
+    dataBuffer.temp.push([timestamp, newData.temperature || 0]);
+    dataBuffer.humidity.push([timestamp, newData.humidity || 0]);
+    
+    // Clean old data outside the time window (24 hours)
+    const cutoffTime = timestamp - (24 * 60 * 60 * 1000);
+    const cleanBuffer = (buffer) => {
+        const index = buffer.findIndex(point => point[0] >= cutoffTime);
+        if (index > 0) {
+            return buffer.slice(index);
+        }
+        return buffer;
+    };
+    
+    // Clean buffers but maintain at least one point before current view
+    const viewCutoff = currentMin - (60 * 1000); // Keep 1 minute of data before view
+    const cleanBufferWithView = (buffer) => {
+        const cutoffIndex = buffer.findIndex(point => point[0] >= viewCutoff);
+        if (cutoffIndex > 0) {
+            return buffer.slice(Math.max(0, cutoffIndex - 1));
+        }
+        return buffer;
+    };
+    
+    // Clean data but maintain view context
+    dataBuffer.co2 = cleanBufferWithView(dataBuffer.co2);
+    dataBuffer.vpd = cleanBufferWithView(dataBuffer.vpd);
+    dataBuffer.temp = cleanBufferWithView(dataBuffer.temp);
+    dataBuffer.humidity = cleanBufferWithView(dataBuffer.humidity);
+
+    if (window.stackedChart) {
+        window.stackedChart.setOption({
+            xAxis: {
+                min: currentMin,
+                max: currentMax
+            },
+            series: [
+                { name: 'VPD',         data: dataBuffer.vpd },
+                { name: 'Temperature', data: dataBuffer.temp },
+                { name: 'CO2',         data: dataBuffer.co2 },
+                { name: 'Humidity',    data: dataBuffer.humidity }
+            ]
+        }, false);
+    }
+
+    // Update thermal map if data is available
+    if (newData.thermalHeatmap && window.thermalMap) {
+        window.updateThermalMap(newData.thermalHeatmap);
+    }
+};
+
+/* 
+   B) updateHardwareChartData => new hardware events
+   Handles real-time updates to hardware states
+*/
+window.updateHardwareChartData = function(newEvent) {
+    const chart = window.hardwareCharts[newEvent.hardwareId];
+    if (!chart) return;
+
+    // Get current time range
+    const currentOption = chart.getOption();
+    const currentMin = currentOption.xAxis[0].min;
+    const currentMax = currentOption.xAxis[0].max;
+
+    const timestamp = newEvent.timestamp || Date.now();
+    const data = chart.getOption().series[0].data;
+    
+    // Special handling for CO2 valve
+    if (newEvent.hardwareId === 'co2_valve' && newEvent.value) {
+        // Add step before state change
+        if (data.length > 0) {
+            data.push([timestamp - 1, data[data.length - 1][1]]);
+        }
+        
+        // Add ON state
+        data.push([timestamp, 1]);
+        
+        // Add OFF state after 30 seconds
+        data.push([timestamp + 30000, 0]);
+    } else {
+        // Normal handling for other devices
+        // Add step before state change
+        if (data.length > 0) {
+            data.push([timestamp - 1, data[data.length - 1][1]]);
+        }
+        
+        // Add new state
+        data.push([timestamp, newEvent.value ? 1 : 0]);
+    }
+    
+    // Clean up old data points (keep last 24 hours)
+    const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+    while (data.length > 0 && data[0][0] < twentyFourHoursAgo) {
+        data.shift();
+    }
+    
+    chart.setOption({
+        xAxis: {
+            min: currentMin,
+            max: currentMax
+        },
+        series: [{
+            data: data
+        }]
+    });
+};
+
+/* 
+   Same thermal map updater as before 
+*/
+window.updateThermalMap = function(heatmapData) {
+    if (!window.thermalMap) {
+        console.error('[Chart] Thermal map not initialized');
+        return;
+    }
+    
+    if (!Array.isArray(heatmapData)) {
+        console.error('[Chart] Invalid thermal data format: not an array');
+        return;
+    }
+
+    const isValidFormat = heatmapData.every(point => 
+        Array.isArray(point) && 
+        point.length === 3 && 
+        !isNaN(point[0]) && !isNaN(point[1]) && !isNaN(point[2])
+    );
+
+    if (!isValidFormat) {
+        console.error('[Chart] Invalid thermal data format: each point must be [x, y, value]');
+        return;
+    }
+
+    window.thermalMap.setOption({
+        series: [{ data: heatmapData }]
+    });
+};
+
+/* 
+   --------------
+   5) DOM Content
+   --------------
+   Initialize both charts 
+*/
+document.addEventListener('DOMContentLoaded', () => {
+    // 1) Main chart (full-size)
+    initMainChart();
+
+    // 2) Hardware charts (bottom 25% overlay)
+    initHardwareCharts();
+
+    // Setup timing button and dropdown
+    const timingButton = document.getElementById('Btn_Graph_Timing_0');
+    if (timingButton) {
+        // Create dropdown menu
+        const dropdown = document.createElement('div');
+        dropdown.className = 'dropdown-menu';
+        dropdown.innerHTML = `
+            <div class="dropdown-item" data-hours="4">Last 4 Hours</div>
+            <div class="dropdown-item" data-hours="24">Last 24 Hours</div>
+            <div class="dropdown-item" data-hours="168">Last 7 Days</div>
+        `;
+        document.body.appendChild(dropdown);
+
+        // Toggle dropdown on button click
+        timingButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const rect = timingButton.getBoundingClientRect();
+            dropdown.style.top = `${rect.bottom}px`;
+            dropdown.style.left = `${rect.left}px`;
+            dropdown.classList.toggle('show');
+        });
+
+        // Handle dropdown item clicks
+        dropdown.addEventListener('click', (event) => {
+            const item = event.target.closest('.dropdown-item');
+            if (item) {
+                const hours = parseInt(item.dataset.hours);
+                fetchHistoricalData(hours);
+                fetchHardwareHistory(hours);
+                dropdown.classList.remove('show');
+            }
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', () => {
+            dropdown.classList.remove('show');
+        });
+    }
+});
+</script>
+

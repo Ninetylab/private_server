@@ -1,0 +1,293 @@
+<!-- fan_curves.shtml -->
+<script>
+    // Global flag to ensure the plugin is loaded only once
+    window.isPluginLoaded = false;
+    
+    window.FanCurves = {
+        init() {
+            if (!window.Chart) {
+                console.error('Chart.js not loaded');
+                return;
+            }
+            
+            console.log('Chart.js loaded, initializing fan curves');
+    
+            const chartConfig = {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'Fan Speed',
+                        data: [
+                            { x: 15, y: 0 },
+                            { x: 20, y: 20 },
+                            { x: 25, y: 40 },
+                            { x: 30, y: 60 },
+                            { x: 35, y: 80 },
+                            { x: 40, y: 100 }
+                        ],
+                        borderColor: '#6aade4',
+                        backgroundColor: 'rgba(106, 173, 228, 0.2)',
+                        fill: true,
+                        tension: 0.1,
+                        pointRadius: 8,
+                        pointHoverRadius: 10,
+                        pointHitRadius: 25
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        datalabels: { 
+                            display: false 
+                        },
+                        dragData: {
+                            dragX: true,
+                            dragY: true,
+                            round: 0,
+                            showTooltip: true,
+                            onDragStart: function(e) {
+                                console.log('Started dragging point');
+                            },
+                            onDrag: function(e, element) {
+                                if (e.target?.style) {
+                                    e.target.style.cursor = 'grabbing';
+                                }
+                                // Only log, don't update curve
+                                const value = element.element.$context.raw;
+                                console.log(`Dragging - Temp: ${value.x}°C, Speed: ${value.y}%`);
+                            },
+                            onDragEnd: function(e, element) {
+                                if (e.target?.style) {
+                                    e.target.style.cursor = 'default';
+                                }
+                                // Only log, don't update curve
+                                const value = element.element.$context.raw;
+                                console.log(`Final - Temp: ${value.x}°C, Speed: ${value.y}%`);
+                            }
+                        },
+                        legend: {
+                            display: false
+                        }
+                    },
+                    onHover: function(e) {
+                        const point = e.chart.getElementsAtEventForMode(
+                            e,
+                            e.chart.options.interaction.mode,
+                            { intersect: true },
+                            false
+                        );
+                        e.native.target.style.cursor = (point.length) ? 'grab' : 'default';
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            min: 15,
+                            max: 40,
+                            grid: { display: false },
+                            ticks: { display: false },
+                            border: { display: false }
+                        },
+                        y: {
+                            min: 0,
+                            max: 100,
+                            grid: { display: false },
+                            ticks: { display: false },
+                            border: { display: false }
+                        }
+                    }
+                }
+            };
+    
+            function onPluginScriptLoaded() {
+                if (!window.isPluginLoaded) {
+                    console.log("Plugin script loaded");
+                }
+                window.isPluginLoaded = true;
+    
+                // First fetch saved curves from server
+                fetch('/state')
+                    .then(response => response.json())
+                    .then(state => {
+                        if (state.fanCurves) {
+                            const curve1 = state.fanCurves.FanCurve1;
+                            const curve2 = state.fanCurves.FanCurve2;
+
+                            // Use window.FanCurves to ensure correct context
+                            if (window.FanCurves.validateCurveData(curve1)) {
+                                chartConfig.data.datasets[0].data = curve1;
+                            }
+                            
+                            const ctx1 = document.getElementById('myChart1').getContext('2d');
+                            window.fanChart1 = new Chart(ctx1, JSON.parse(JSON.stringify(chartConfig)));
+
+                            // Validate and apply curve2
+                            if (window.FanCurves.validateCurveData(curve2)) {
+                                chartConfig.data.datasets[0].data = curve2;
+                            }
+                            
+                            const ctx2 = document.getElementById('myChart2').getContext('2d');
+                            window.fanChart2 = new Chart(ctx2, JSON.parse(JSON.stringify(chartConfig)));
+
+                            console.log('Fan curves restored from saved state');
+                        } else {
+                            console.log('No saved fan curves found, using defaults');
+                            // Initialize with default configuration
+                            const ctx1 = document.getElementById('myChart1').getContext('2d');
+                            const ctx2 = document.getElementById('myChart2').getContext('2d');
+                            window.fanChart1 = new Chart(ctx1, JSON.parse(JSON.stringify(chartConfig)));
+                            window.fanChart2 = new Chart(ctx2, JSON.parse(JSON.stringify(chartConfig)));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading fan curves:', error);
+                        // Initialize with defaults on error
+                        const ctx1 = document.getElementById('myChart1').getContext('2d');
+                        const ctx2 = document.getElementById('myChart2').getContext('2d');
+                        window.fanChart1 = new Chart(ctx1, JSON.parse(JSON.stringify(chartConfig)));
+                        window.fanChart2 = new Chart(ctx2, JSON.parse(JSON.stringify(chartConfig)));
+                    });
+            }
+    
+            if (window.isPluginLoaded) {
+                onPluginScriptLoaded();
+            } else {
+                // Load the drag-data plugin from the node_modules location
+                let scriptElement = document.createElement("script");
+                scriptElement.src = "/node_modules/chartjs-plugin-dragdata/dist/chartjs-plugin-dragdata.min.js";
+                console.log("Loading plugin script from:", scriptElement.src);
+                scriptElement.onload = onPluginScriptLoaded;
+                document.head.appendChild(scriptElement);
+            }
+        },
+    
+        // Add validation function
+        validateCurveData(curve) {
+            // Check if curve exists and is an array
+            if (!Array.isArray(curve)) {
+                console.warn('Invalid curve data: not an array');
+                return false;
+            }
+
+            // Check if curve has required points
+            if (curve.length < 2) {
+                console.warn('Invalid curve data: insufficient points');
+                return false;
+            }
+
+            // Validate each point
+            return curve.every(point => {
+                if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') {
+                    console.warn('Invalid curve point:', point);
+                    return false;
+                }
+                // Validate ranges
+                if (point.x < 15 || point.x > 40 || point.y < 0 || point.y > 100) {
+                    console.warn('Point out of valid range:', point);
+                    return false;
+                }
+                return true;
+            });
+        },
+    
+        /**
+         * saveCurve(curveIndex)
+         * Reads the current curve data from the specified chart (1 or 2) and sends it to the server.
+         */
+        saveCurve(curveIndex) {
+            let curveData;
+            if (curveIndex === 1) {
+                if (!window.fanChart1) {
+                    console.error("Fan Chart 1 not initialized");
+                    return;
+                }
+                curveData = window.fanChart1.data.datasets[0].data;
+            } else if (curveIndex === 2) {
+                if (!window.fanChart2) {
+                    console.error("Fan Chart 2 not initialized");
+                    return;
+                }
+                curveData = window.fanChart2.data.datasets[0].data;
+            } else {
+                console.error("Invalid fan curve index");
+                return;
+            }
+
+            // Validate before saving
+            if (!this.validateCurveData(curveData)) {
+                console.error('Invalid curve data, save aborted');
+                return;
+            }
+
+            console.log(`Saving Fan Curve ${curveIndex}:`, curveData);
+            
+            // Post the updated curve to the server for persistence
+            fetch('/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    type: 'saveFanCurve', 
+                    id: `FanCurve${curveIndex}`, 
+                    curve: curveData 
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log(`Fan curve ${curveIndex} saved successfully:`, data);
+                // Show popup
+                this.showPopup(`Fan Curve ${curveIndex} Saved Successfully`);
+                // Update terminal statuses
+                if (window.Terminal && window.Terminal.updateGuiStatus) {
+                    window.Terminal.updateGuiStatus(`Fan curve ${curveIndex} saved successfully`, 'success');
+                    window.Terminal.updateLogicStatus(`Fan curve ${curveIndex} saved and active`, 'success');
+                    window.Terminal.updateSystemStatus('System running with updated fan curves', 'success');
+                }
+            })
+            .catch(err => {
+                console.error("Error saving fan curve:", err);
+                if (window.Terminal && window.Terminal.updateGuiStatus) {
+                    window.Terminal.updateGuiStatus(`Error saving fan curve ${curveIndex}`, 'error');
+                }
+            });
+        },
+
+        showPopup(message, type = 'success') {
+            const popup = document.createElement('div');
+            popup.className = `popup ${type}`;
+            popup.textContent = message;
+            document.body.appendChild(popup);
+            
+            setTimeout(() => {
+                popup.remove();
+            }, 2000);
+        }
+    };
+    
+    // Initialize FanCurves when the document has loaded
+    window.addEventListener('load', () => {
+        window.FanCurves.init();
+    });
+</script>
+    
+<style>
+    .popup {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.9);
+        color: #fff;
+        padding: 20px;
+        border-radius: 5px;
+        z-index: 1000;
+        text-align: center;
+    }
+    .popup.success { border: 2px solid #4CAF50; }
+    .popup.error { border: 2px solid #f44336; }
+</style>
+    

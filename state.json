@@ -1,0 +1,181 @@
+{
+  "buttons": {
+    "Btn_+_Vpd_Set_0": false,
+    "Btn_-_Vpd_Set_0": false,
+    "Btn_-_Co2_Set_0": false,
+    "Btn_+_Co2_Set_0": false,
+    "Btn_-_Temp_Set_0": false,
+    "Btn_+_Temp_Set_0": false,
+    "Btn_Heat+_0": true,
+    "Btn_Heat-_0": false,
+    "Btn_Dehumidifier_0": true,
+    "Btn_Humidifier_0": false,
+    "Btn_Co2_Status_0": false,
+    "Btn_Irrig_Pump_0": false,
+    "Btn_Mix_Pump_0": false,
+    "Btn_Step_1_0": false,
+    "Btn_Step_2_0": false,
+    "Btn_Step_3_0": false,
+    "Btn_Step_4_0": false,
+    "Btn_Step_5_0": false,
+    "Btn_Step_6_0": false,
+    "Btn_Step_7_0": false,
+    "Btn_Step_8_0": false,
+    "Btn_Step_9_0": false,
+    "Btn_Step_10_0": false,
+    "Btn_Step_11_0": false,
+    "Btn_Step_12_0": false,
+    "Btn_Step_13_0": false,
+    "Btn_Step_14_0": false,
+    "Btn_Step_15_0": false,
+    "Btn_Step_16_0": false,
+    "Btn_Step_17_0": false,
+    "Btn_Step_18_0": false,
+    "Btn_Step_19_0": false,
+    "Btn_Step_20_0": false,
+    "Btn_Step_21_0": false,
+    "Btn_Step_22_0": false,
+    "Btn_Step_23_0": false,
+    "Btn_Step_24_0": false,
+    "Btn_Mode_Auto_Irrig_0": false,
+    "Btn_Thermal_Mode_0": false,
+    "Btn_Save_Fan_Curve1_0": true,
+    "Btn_+_Lighse_Interval_0": false,
+    "Btn_+_Pulse_Interval_0": false,
+    "Btn_+_Pulse_Count_0": false,
+    "Btn_-_Sub_Moist_Set_Neg_DB_0": false,
+    "Btn_+_Sub_Moist_Set_Neg_DB_0": false,
+    "Btn_+_Sub_EC_Set_0": false,
+    "Btn_-_Sub_EC_Set_0": false,
+    "Btn_-_Sub_EC_Set_Pos_DB_0": false,
+    "Btn_-_Sub_EC_Set_Neg_DB_0": false,
+    "Btn_+_Sub_EC_Set_Neg_DB_0": false,
+    "Btn_+_Sub_EC_Set_Pos_DB_0": false,
+    "Btn_Graph_Co2_0": true,
+    "Btn_Graph_Humidity_0": true,
+    "Btn_Graph_Temp_0": true,
+    "Btn_Graph_Vpd_0": true,
+    "Btn_Co2_Valve_0": true,
+    "Btn_Heater_0": false,
+    "Btn_Microscope": true,
+    "Btn_Settings": true,
+    "Btn_Scroll_Left": true,
+    "Btn_Scroll_Mid": false,
+    "Btn_Scroll_Right": true,
+    "Btn_Fullscreen": false,
+    "Btn_-_Pulse_Count_0": false,
+    "Btn_+_Sub_Moist_Set_0": false,
+    "Btn_-_Sub_Moist_Set_0": false,
+    "Btn_-_Sub_Moist_Set_Pos_DB_0": false,
+    "Btn_+_Sub_Moist_Set_Pos_DB_0": false,
+    "Btn_Light_0": true,
+    "Btn_Graph_Timing_0": false,
+    "Btn_Graph_Reload_0": false,
+    "Btn_Water_lvl_Cal_0": true,
+    "Btn_Boost_660nm_0": false,
+    "Btn_Light_State_0": true,
+    "Btn_-_Pulse_Interval_0": false,
+    "Btn_Save_Curve1_0": false,
+    "Btn_Save_Curve2_0": false,
+    "Btn_+_Step_Duration_0": false,
+    "Btn_Dehumidifier_0_failed": true,
+    "Btn_Humidifier_0_failed": true,
+    "Btn_Co2_Status_0_failed": true,
+    "Btn_Heat-_0_failed": true,
+    "Btn_Heat+_0_failed": true,
+    "Status_Serv_0": false,
+    "Is_Pi_Connected_0": false,
+    "Status_Esp1_0": false,
+    "Status_Esp2_0": false,
+    "Status_Esp3_0": false,
+    "Btn_Irrig_Pump_0_failed": true,
+    "Btn_Light_0_failed": true,
+    "Btn_-_Step_Duration_0": false,
+    "Btn_+_Pulse_Duration_0": false,
+    "Btn_-_Pulse_Duration_0": false,
+    "Btn_Save_Irrig_0": false,
+    "Btn_+_Light_Start_0": false,
+    "Btn_+_Light_Stop_0": false,
+    "Btn_-_Light_Start_0": false,
+    "Btn_-_Light_Stop_0": false,
+    "Btn_Graph_Co2Valve_0": false,
+    "Btn_Graph_Heat+_0": false,
+    "Btn_Graph_Humidifier_0": false,
+    "Btn_Graph_Dehumidifier_0": false,
+    "Btn_Fullscreen_0": false
+  },
+  "setpoints": {
+    "Temp_setpoint": "24",
+    "Co2_setpoint": "1301",
+    "VPD_setpoint": "1.10",
+    "Sub_EC_setpoint": "0.74",
+    "Sub_Moist_setpoint": "7.00",
+    "Step_Duration_setpoint": "2",
+    "Pulse_Duration_setpoint": "1",
+    "Pulse_Interval_setpoint": "2",
+    "Event_Count_setpoint": "1",
+    "Light_Start_setpoint": "15:30",
+    "Light_Shutdown_setpoint": "06:44",
+    "Sub_EC_Pos_DB_setpoint": "0.01",
+    "Sub_EC_Neg_DB_setpoint": "-0.05",
+    "Sub_Moist_Pos_DB_setpoint": "-0.70",
+    "Sub_Moist_Neg_DB_setpoint": "-0.10",
+    "temp-hyst": "1.0",
+    "co2-hyst": "50",
+    "vpd-hyst": "0.2"
+  },
+  "fanCurves": {
+    "FanCurve1": [
+      {
+        "x": 15,
+        "y": 50
+      },
+      {
+        "x": 24,
+        "y": 56
+      },
+      {
+        "x": 32,
+        "y": 66
+      },
+      {
+        "x": 34,
+        "y": 73
+      },
+      {
+        "x": 39,
+        "y": 83
+      },
+      {
+        "x": 40,
+        "y": 96
+      }
+    ],
+    "FanCurve2": [
+      {
+        "x": 15,
+        "y": 20
+      },
+      {
+        "x": 25,
+        "y": 44
+      },
+      {
+        "x": 28,
+        "y": 59
+      },
+      {
+        "x": 33,
+        "y": 72
+      },
+      {
+        "x": 38,
+        "y": 83
+      },
+      {
+        "x": 40,
+        "y": 100
+      }
+    ]
+  }
+}
